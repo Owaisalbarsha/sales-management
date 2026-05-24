@@ -27,6 +27,7 @@ target/
 .env
 application-local.yml
 application-secrets.yml
+application-local.properties
 
 ### NetBeans ###
 /nbproject/private/

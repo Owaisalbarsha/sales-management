@@ -33,7 +33,7 @@ public record CreateUserRequest(
 
         /**
          * Email address, serves as the unique login identifier.
-         * Must not already exist in the system — {@link com.salesmanagement.identity.internal.UserService}
+         * Must not already exist in the system — {@link UserService}
          * rejects duplicates with a {@link com.salesmanagement.shared.exception.BusinessException}
          * before attempting to persist.
          */

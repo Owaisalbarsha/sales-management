@@ -1,6 +1,7 @@
 package com.salesmanagement.identity.internal;
 
 import com.salesmanagement.identity.internal.dto.CreateUserRequest;
+import com.salesmanagement.identity.internal.dto.ResetPasswordRequest;
 import com.salesmanagement.identity.internal.dto.UserResponse;
 import com.salesmanagement.shared.api.ApiResponse;
 import jakarta.validation.Valid;
@@ -141,5 +142,16 @@ public class UserController {
         userService.updateStatus(id, status);
         return ResponseEntity.ok(
                 ApiResponse.noContent("User status updated successfully"));
+    }
+
+    // UserController.java — add this endpoint
+
+    @PatchMapping("/{id}/password")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @PathVariable Long id,
+            @Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(id, request.newPassword());
+        return ResponseEntity.ok(ApiResponse.noContent("Password reset successfully"));
     }
 }

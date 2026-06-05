@@ -1,9 +1,11 @@
 package com.salesmanagement.identity.internal;
 
+import com.salesmanagement.identity.internal.dto.ChangePasswordRequest;
 import com.salesmanagement.identity.internal.dto.LoginRequest;
 import com.salesmanagement.identity.internal.dto.LoginResponse;
 import com.salesmanagement.shared.api.ApiResponse;
 import com.salesmanagement.shared.exception.BusinessException;
+import com.salesmanagement.shared.security.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,6 +57,7 @@ public class AuthController {
     private final UserService           userService;
     private final JwtService            jwtService;
     private final SessionService        sessionService;
+    private final LoginAttemptService   loginAttemptService;
 
     // ─── Endpoints ────────────────────────────────────────────────────────────
 
@@ -79,6 +82,15 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(
             @Valid @RequestBody LoginRequest request) {
 
+        // ── Lockout check — before any authentication work ──────────────
+        if (loginAttemptService.isLocked(request.email())) {
+            long minutes = loginAttemptService.getRemainingLockoutMinutes(request.email());
+            throw BusinessException.badRequest(
+                    "Account temporarily locked due to too many failed attempts. Try again in "
+                            + minutes + " minutes.",
+                    "ACCOUNT_LOCKED");
+        }
+
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
@@ -86,10 +98,15 @@ public class AuthController {
                             request.email().toLowerCase(),
                             request.password()));
         } catch (BadCredentialsException | DisabledException e) {
+            // ── Record the failure ──────────────────────────────────────
+            loginAttemptService.recordFailure(request.email());
             throw BusinessException.badRequest(
                     "Invalid email or password",
                     "INVALID_CREDENTIALS");
         }
+
+        // ── Login succeeded — clear any previous failures ───────────────
+        loginAttemptService.recordSuccess(request.email());
 
         User user            = userService.getByEmail(authentication.getName());
         String accessToken   = jwtService.generateAccessToken(user);
@@ -175,6 +192,15 @@ public class AuthController {
         log.info("Logout successful: userId={}", userId);
 
         return ResponseEntity.ok(ApiResponse.noContent("Logged out successfully"));
+    }
+
+    @PatchMapping("/password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request) {
+
+        Long userId = SecurityUtils.getCurrentUserId();
+        userService.changePassword(userId, request.currentPassword(), request.newPassword());
+        return ResponseEntity.ok(ApiResponse.noContent("Password changed successfully"));
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────────

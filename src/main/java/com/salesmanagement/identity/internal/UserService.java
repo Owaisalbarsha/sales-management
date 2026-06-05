@@ -2,6 +2,7 @@ package com.salesmanagement.identity.internal;
 
 import com.salesmanagement.identity.api.UserCreatedEvent;
 import com.salesmanagement.identity.internal.dto.CreateUserRequest;
+import com.salesmanagement.identity.internal.repository.UserRepository;
 import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
@@ -240,5 +241,26 @@ public class UserService implements UserDetailsService {
         }
 
         log.info("User status updated: id={}, newStatus={}", userId, newStatus);
+    }
+
+    @Transactional
+    void resetPassword(Long userId, String newRawPassword) {
+        User user = getById(userId);
+        user.setPasswordHash(passwordEncoder.encode(newRawPassword));
+        log.info("Password reset by admin for userId={}", userId);
+    }
+
+    @Transactional
+    void changePassword(Long userId, String currentRawPassword, String newRawPassword) {
+        User user = getById(userId);
+
+        if (!passwordEncoder.matches(currentRawPassword, user.getPasswordHash())) {
+            throw BusinessException.badRequest(
+                    "Current password is incorrect",
+                    "WRONG_PASSWORD");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newRawPassword));
+        log.info("Password changed by user: userId={}", userId);
     }
 }

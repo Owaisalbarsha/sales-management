@@ -1,5 +1,8 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.repository;
 
+import com.salesmanagement.identity.internal.User;
+import com.salesmanagement.identity.internal.UserService;
+import com.salesmanagement.identity.internal.UserStatus;
 import com.salesmanagement.shared.security.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -30,7 +33,7 @@ import java.util.Optional;
  * interfaces extending {@link JpaRepository} automatically during component
  * scanning. Adding the annotation would be redundant.
  */
-interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long> {
 
     /**
      * Looks up a user by their email address.
@@ -52,7 +55,7 @@ interface UserRepository extends JpaRepository<User, Long> {
     /**
      * Checks whether any user account is already registered with the given email.
      *
-     * <p>Used exclusively in {@link UserService#create} to reject duplicate
+     * <p>Used exclusively in {@link UserService# create} to reject duplicate
      * registrations before the expensive BCrypt hash computation runs.
      * Prefer this over {@code findByEmail(...).isPresent()} — it issues a
      * {@code SELECT 1} existence check instead of loading the full entity.

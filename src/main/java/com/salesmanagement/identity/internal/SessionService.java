@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -13,30 +12,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * Enforces the single-active-session-per-user rule (FR-5).
  *
  * <p><b>The rule:</b> at any point in time, a user may have at most one valid
- * access token. When the same user logs in from a second device, the first
- * session is revoked immediately — its {@code jti} is blacklisted and the new
- * token becomes the only valid session.
+ * session — meaning one access token and one refresh token. When the same user
+ * logs in from a second device, both tokens from the previous session are
+ * blacklisted immediately.
  *
- * <p><b>What is stored in the active-session registry:</b> the raw token string,
- * not the {@code jti}. The raw token is kept so that when a session is replaced,
- * its {@code jti} can be extracted via {@link JwtService#extractJti} and written
- * to {@link TokenBlacklistStore}. Storing only the {@code jti} would be insufficient
- * because {@link TokenBlacklistStore} also needs the expiry, which requires parsing
- * the token anyway.
+ * <p><b>Why both tokens must be tracked:</b> blacklisting only the access token
+ * leaves the old refresh token alive. When the old device's access token expires
+ * after 15 minutes, its HTTP interceptor silently calls {@code /api/auth/refresh}
+ * with the still-valid refresh token and gets a new session — bypassing
+ * single-session enforcement entirely. Blacklisting both tokens on re-login
+ * closes this gap.
  *
- * <p><b>What the blacklist stores:</b> the {@code jti} UUID — not the raw token.
- * This matches what {@code JwtAuthFilter} passes to
- * {@link com.salesmanagement.shared.security.TokenBlacklistChecker#isBlacklisted},
- * which reads {@code claims.getId()} from the incoming request's token.
- *
- * <p><b>Storage limitation:</b> the active-session registry is an in-memory
- * {@link ConcurrentHashMap}. Sessions do not survive a server restart. For
- * production, replace with a Redis {@code HSET} or a dedicated
- * {@code active_sessions} database table — the change is confined to this class.
- *
- * <p>This class is public so {@link AuthController} can inject it across
- * sub-packages within the identity module. Spring Modulith's {@code verify()}
- * still prevents any class outside the identity module from importing it.
+ * <p><b>Storage:</b> in-memory {@link ConcurrentHashMap}. Does not survive
+ * restart. Production upgrade: Redis {@code HSET} per user.
  */
 @Slf4j
 @Service
@@ -47,31 +35,29 @@ public class SessionService {
     private final JwtService          jwtService;
 
     /**
-     * Key: userId. Value: raw JWT string of the currently valid access token.
-     * A missing entry means the user has no active session.
+     * Key: userId.
+     * Value: both tokens from the current active session.
      */
-    private final Map<Long, String> activeSessions = new ConcurrentHashMap<>();
+    private final Map<Long, TokenPair> activeSessions = new ConcurrentHashMap<>();
 
     // ─── Session lifecycle ────────────────────────────────────────────────────
 
     /**
-     * Registers a new session for the given user, revoking any existing session.
+     * Registers a new session, revoking any existing session for this user.
      *
-     * <p>Called by {@link AuthController} after a successful login or token refresh.
-     * If a previous session exists, its {@code jti} is extracted and written to
-     * {@link TokenBlacklistStore} before the new token is registered — there is
-     * no window in which both tokens are simultaneously valid.
+     * <p>Both the previous access token and the previous refresh token are
+     * blacklisted. The new pair becomes the only valid session.
      *
-     * @param userId   the database primary key of the user starting a session
-     * @param newToken the freshly issued access token to register as active
+     * @param userId       the user starting a new session
+     * @param accessToken  the freshly issued access token
+     * @param refreshToken the freshly issued refresh token
      */
-    public void registerSession(Long userId, String newToken) {
-        String previousToken = activeSessions.put(userId, newToken);
+    public void registerSession(Long userId, String accessToken, String refreshToken) {
+        TokenPair previous = activeSessions.put(userId, new TokenPair(accessToken, refreshToken));
 
-        if (previousToken != null) {
-            String jti    = jwtService.extractJti(previousToken);
-            Date   expiry = jwtService.extractExpiry(previousToken);
-            blacklistStore.blacklist(jti, expiry);
+        if (previous != null) {
+            blacklistToken(previous.accessToken);
+            blacklistToken(previous.refreshToken);
             log.info("Previous session revoked for userId={} — FR-5 enforced", userId);
         }
 
@@ -79,57 +65,69 @@ public class SessionService {
     }
 
     /**
-     * Invalidates the current session for the given user.
+     * Invalidates the current session on logout.
      *
-     * <p>Called by {@link AuthController} on {@code POST /api/auth/logout}.
-     * The token's {@code jti} is extracted and blacklisted immediately so the
-     * token cannot be reused even within its remaining lifetime.
+     * <p>Both tokens are blacklisted. Calling twice is safe — a missing
+     * session is a no-op.
      *
-     * <p>Calling this method twice for the same user is safe — a missing session
-     * entry is treated as a no-op, handling network retries gracefully.
-     *
-     * @param userId the database primary key of the user logging out
-     * @param token  the access token to invalidate
+     * @param userId the user logging out
      */
-    public void invalidateSession(Long userId, String token) {
-        String removedToken = activeSessions.remove(userId);
+    public void invalidateSession(Long userId) {
+        TokenPair removed = activeSessions.remove(userId);
 
-        if (removedToken == null) {
+        if (removed == null) {
             log.debug("Logout for userId={} with no active session — no-op", userId);
             return;
         }
 
-        String jti    = jwtService.extractJti(token);
-        Date   expiry = jwtService.extractExpiry(token);
-        blacklistStore.blacklist(jti, expiry);
+        blacklistToken(removed.accessToken);
+        blacklistToken(removed.refreshToken);
         log.info("Session invalidated for userId={}", userId);
     }
 
     // ─── Queries ──────────────────────────────────────────────────────────────
 
     /**
-     * Returns {@code true} if the given token is the currently registered
+     * Returns {@code true} if the given token is part of the currently
      * active session for the specified user.
      *
-     * <p>A defence-in-depth check on top of JWT signature, expiry, and blacklist
-     * validation. A token can pass all three and still be rejected here if the
-     * user has since logged in from another device, making this the older,
-     * now-replaced session.
-     *
-     * @param userId the database primary key of the user making the request
+     * @param userId the user making the request
      * @param token  the access token to verify
-     * @return {@code true} if this token is the current active session
-     * @throws BusinessException {@code 403} if the user has no active session at all
+     * @return {@code true} if this token belongs to the current active session
+     * @throws BusinessException {@code 403} if the user has no active session
      */
     public boolean isCurrentSession(Long userId, String token) {
-        String activeToken = activeSessions.get(userId);
+        TokenPair active = activeSessions.get(userId);
 
-        if (activeToken == null) {
+        if (active == null) {
             throw BusinessException.forbidden(
                     "No active session found for user: " + userId,
                     "NO_ACTIVE_SESSION");
         }
 
-        return activeToken.equals(token);
+        return active.accessToken.equals(token);
     }
+
+    // ─── Private helpers ──────────────────────────────────────────────────────
+
+    /**
+     * Extracts the {@code jti} from a token and writes it to the blacklist.
+     * Handles the case where a token might already be expired (e.g. the old
+     * access token expired naturally before the user re-logged in).
+     */
+    private void blacklistToken(String token) {
+        try {
+            String jti    = jwtService.extractJti(token);
+            java.util.Date expiry = jwtService.extractExpiry(token);
+            blacklistStore.blacklist(jti, expiry);
+        } catch (Exception e) {
+            // Token already expired — no need to blacklist, it's dead anyway
+            log.debug("Skipped blacklisting already-expired token: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Holds both tokens for a single active session.
+     */
+    private record TokenPair(String accessToken, String refreshToken) {}
 }

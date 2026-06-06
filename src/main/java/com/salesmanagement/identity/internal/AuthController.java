@@ -58,6 +58,7 @@ public class AuthController {
     private final JwtService            jwtService;
     private final SessionService        sessionService;
     private final LoginAttemptService   loginAttemptService;
+    private final TokenBlacklistStore   blacklistStore;
 
     // ─── Endpoints ────────────────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ public class AuthController {
         String accessToken   = jwtService.generateAccessToken(user);
         String refreshToken  = jwtService.generateRefreshToken(user);
 
-        sessionService.registerSession(user.getId(), accessToken);
+        sessionService.registerSession(user.getId(), accessToken, refreshToken);
 
         log.info("Login successful: userId={}, role={}", user.getId(), user.getRole());
 
@@ -147,6 +148,14 @@ public class AuthController {
                     "INVALID_REFRESH_TOKEN");
         }
 
+        // ── Blacklist check — the filter is skipped for this endpoint ────
+        String jti = jwtService.extractJti(refreshToken);
+        if (blacklistStore.isBlacklisted(jti)) {
+            throw BusinessException.badRequest(
+                    "Refresh token has been revoked",
+                    "REVOKED_REFRESH_TOKEN");
+        }
+
         User user = userService.getByEmail(jwtService.extractEmail(refreshToken));
 
         if (!user.canLogin()) {
@@ -158,7 +167,7 @@ public class AuthController {
         String newAccessToken  = jwtService.generateAccessToken(user);
         String newRefreshToken = jwtService.generateRefreshToken(user);
 
-        sessionService.registerSession(user.getId(), newAccessToken);
+        sessionService.registerSession(user.getId(), newAccessToken, newRefreshToken);
 
         log.info("Token refreshed: userId={}", user.getId());
 
@@ -187,7 +196,7 @@ public class AuthController {
         String token  = extractBearerToken(bearerToken);
         long   userId = jwtService.extractUserId(token);
 
-        sessionService.invalidateSession(userId, token);
+        sessionService.invalidateSession(jwtService.extractUserId(token));
 
         log.info("Logout successful: userId={}", userId);
 

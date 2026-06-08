@@ -196,7 +196,7 @@ public class AuthController {
         String token  = extractBearerToken(bearerToken);
         long   userId = jwtService.extractUserId(token);
 
-        sessionService.invalidateSession(jwtService.extractUserId(token));
+        sessionService.invalidateSession(userId);
 
         log.info("Logout successful: userId={}", userId);
 

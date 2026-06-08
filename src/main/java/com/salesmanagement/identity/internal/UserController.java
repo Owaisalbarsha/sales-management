@@ -25,9 +25,6 @@ import java.util.List;
  *
  * <p><b>What is intentionally missing:</b>
  * <ul>
- *   <li><b>Password update</b> — not in the current SRS scope. When added, it will
- *       be a separate endpoint ({@code PATCH /api/users/{id}/password}) requiring
- *       the current password for verification.</li>
  *   <li><b>Role update</b> — roles are fixed at creation time. Changing a user's
  *       role requires deactivating the account and creating a new one, preserving
  *       the integrity of historical records tied to the original role identity.</li>
@@ -143,8 +140,6 @@ public class UserController {
         return ResponseEntity.ok(
                 ApiResponse.noContent("User status updated successfully"));
     }
-
-    // UserController.java — add this endpoint
 
     @PatchMapping("/{id}/password")
     @PreAuthorize("hasRole('ADMIN')")

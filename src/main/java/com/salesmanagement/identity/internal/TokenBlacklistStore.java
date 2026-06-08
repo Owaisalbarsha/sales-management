@@ -15,13 +15,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>{@link SessionService} — writes entries when a session is replaced
  *       (FR-5 single-session rule) or invalidated (logout).</li>
- *   <li>{@link # RealTokenBlacklistChecker} — reads entries to implement the
+ *   <li>{@link RealTokenBlacklistChecker} — reads entries to implement the
  *       {@link com.salesmanagement.shared.security.TokenBlacklistChecker}
  *       contract consumed by {@code JwtAuthFilter} in shared.</li>
  * </ul>
  *
  * <p><b>Key:</b> the {@code jti} UUID claim embedded in every JWT by
- * {@link JwtService## buildToken}. {@code JwtAuthFilter} extracts this via
+ * {@link JwtService#buildToken}. {@code JwtAuthFilter} extracts this via
  * {@code claims.getId()} and passes it to
  * {@link com.salesmanagement.shared.security.TokenBlacklistChecker#isBlacklisted}.
  * Keying on {@code jti} rather than the raw token string keeps entries small —
@@ -65,7 +65,7 @@ public class TokenBlacklistStore {
     /**
      * Returns {@code true} if the given {@code jti} has been explicitly revoked.
      *
-     * <p>Called by {@link # RealTokenBlacklistChecker} on every authenticated request.
+     * <p>Called by {@link RealTokenBlacklistChecker} on every authenticated request.
      * The lookup is O(1) and lock-free for concurrent reads.
      *
      * @param jti the UUID {@code jti} claim to check

@@ -1,4 +1,4 @@
-package com.salesmanagement.identity.internal.dto;// dto/ResetPasswordRequest.java
+package com.salesmanagement.identity.internal.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

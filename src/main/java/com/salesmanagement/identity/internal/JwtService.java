@@ -40,7 +40,7 @@ import java.util.UUID;
  * <p><b>jti claim:</b> every token receives a randomly generated UUID as its
  * JWT ID ({@code jti}). {@code JwtAuthFilter} extracts this via
  * {@code claims.getId()} and passes it to {@link com.salesmanagement.shared.security.TokenBlacklistChecker}.
- * {@link # TokenBlacklistStore} and {@link SessionService} key the blacklist on
+ * {@link TokenBlacklistStore} and {@link SessionService} key the blacklist on
  * this same UUID — not the raw token string — keeping blacklist entries small.
  *
  * <p><b>Key derivation:</b> {@code Keys.hmacShaKeyFor(secret.getBytes(UTF_8))},
@@ -216,7 +216,7 @@ public class JwtService implements JwtTokenValidator {
      *
      * <p>Used by {@link SessionService} to set the blacklist TTL on the
      * {@code jti} entry — ensuring blacklisted tokens are evicted from
-     * {@link # TokenBlacklistStore} the moment they would have expired naturally.
+     * {@link TokenBlacklistStore} the moment they would have expired naturally.
      *
      * @param token a validated JWT string
      * @return the token's expiry timestamp
@@ -236,7 +236,7 @@ public class JwtService implements JwtTokenValidator {
      * Extracts the {@code jti} claim — the unique token identifier.
      *
      * <p>Used by {@link SessionService} to obtain the blacklist key when
-     * revoking a token. {@link # TokenBlacklistStore} is keyed on this value,
+     * revoking a token. {@link TokenBlacklistStore} is keyed on this value,
      * matching what {@code JwtAuthFilter} passes to
      * {@link com.salesmanagement.shared.security.TokenBlacklistChecker#isBlacklisted}.
      *

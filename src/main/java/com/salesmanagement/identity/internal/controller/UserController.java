@@ -1,11 +1,14 @@
 package com.salesmanagement.identity.internal.controller;
 
+import com.salesmanagement.identity.internal.dto.UserListResponse;
 import com.salesmanagement.identity.internal.entity.UserStatus;
 import com.salesmanagement.identity.internal.dto.CreateUserRequest;
 import com.salesmanagement.identity.internal.dto.ResetPasswordRequest;
 import com.salesmanagement.identity.internal.dto.UserResponse;
 import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.api.ApiResponse;
+import com.salesmanagement.shared.api.PageRequest;
+import com.salesmanagement.shared.security.UserRole;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,22 +53,38 @@ public class UserController {
     // ─── Endpoints ────────────────────────────────────────────────────────────
 
     /**
-     * Returns all user accounts in the system regardless of role or status.
+     * Lists users with optional search, filtering, pagination, and status counts.
      *
-     * <p>Intended for the ADMIN user management screen. The response includes
-     * status so the UI can distinguish active, inactive, and suspended accounts
-     * without a second request per user.
+     * <p>Query parameters (all optional):
+     * <ul>
+     *   <li>{@code search}  — partial match on name or email</li>
+     *   <li>{@code role}    — filter by exact role</li>
+     *   <li>{@code status}  — filter by exact status</li>
+     *   <li>{@code page}, {@code size}, {@code sortBy}, {@code sortDir} — pagination</li>
+     * </ul>
      *
-     * @return {@code 200 OK} with a list of all users; empty list if none exist
+     * <p>Example:
+     * {@code GET /api/users?search=ahmed&status=ACTIVE&page=0&size=20&sortBy=name&sortDir=asc}
+     *
+     * <p>The response carries the paginated user list plus global status counts
+     * for the dashboard summary cards.
+     *
+     * @param search      optional name/email search term
+     * @param role        optional role filter
+     * @param status      optional status filter
+     * @param pageRequest pagination parameters (bound from query string)
+     * @return {@code 200 OK} with {@link UserListResponse}
      */
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<List<UserResponse>>> getAll() {
-        List<UserResponse> users = userService.getAll()
-                .stream()
-                .map(UserResponse::from)
-                .toList();
-        return ResponseEntity.ok(ApiResponse.ok(users));
+    public ResponseEntity<ApiResponse<UserListResponse>> getAll(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) UserRole role,
+            @RequestParam(required = false) UserStatus status,
+            @Valid PageRequest pageRequest) {
+
+        return ResponseEntity.ok(
+                ApiResponse.ok(userService.searchUsers(search, role, status, pageRequest)));
     }
 
     /**

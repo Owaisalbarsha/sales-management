@@ -2,17 +2,23 @@ package com.salesmanagement.identity.internal.service;
 
 import com.salesmanagement.identity.api.UserCreatedEvent;
 import com.salesmanagement.identity.internal.controller.AuthController;
+import com.salesmanagement.identity.internal.dto.UserListResponse;
+import com.salesmanagement.identity.internal.dto.UserResponse;
+import com.salesmanagement.identity.internal.dto.UserStatusCounts;
 import com.salesmanagement.identity.internal.entity.User;
 import com.salesmanagement.identity.internal.entity.UserStatus;
 import com.salesmanagement.identity.internal.controller.UserController;
 import com.salesmanagement.identity.internal.dto.CreateUserRequest;
 import com.salesmanagement.identity.internal.repository.UserRepository;
+import com.salesmanagement.shared.api.PageRequest;
+import com.salesmanagement.shared.api.PageResponse;
 import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.shared.security.SecurityUtils;
 import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -281,5 +287,46 @@ public class UserService implements UserDetailsService {
         user.setPasswordHash(passwordEncoder.encode(newRawPassword));
         sessionService.invalidateSession(userId);  // force re-login with new password
         log.info("Password changed by user: userId={}", userId);
+    }
+
+    /**
+     * Searches, filters, and paginates users, and computes global status counts.
+     *
+     * <p>This is the single backing method for the user management screen
+     * ({@code GET /api/users}). It performs:
+     * <ol>
+     *   <li>A paginated search with optional name/email, role, and status filters.</li>
+     *   <li>Three global status counts for the dashboard summary cards.</li>
+     * </ol>
+     *
+     * <p>The blank search term is normalised to {@code null} so an empty query
+     * string behaves as "no search" rather than matching on an empty pattern.
+     *
+     * @param search   optional name/email search term (blank treated as null)
+     * @param role     optional role filter
+     * @param status   optional status filter
+     * @param pageRequest pagination and sorting parameters from the controller
+     * @return combined paginated list and global status counts
+     */
+    @Transactional(readOnly = true)
+    public UserListResponse searchUsers(String search,
+                                        UserRole role,
+                                        UserStatus status,
+                                        PageRequest pageRequest) {
+
+        String normalisedSearch = (search == null || search.isBlank()) ? null : search.trim();
+
+        Page<User> page = userRepository.search(
+                normalisedSearch, role, status, pageRequest.toPageable());
+
+        PageResponse<UserResponse> users =
+                PageResponse.of(page.map(UserResponse::from));
+
+        UserStatusCounts counts = UserStatusCounts.of(
+                userRepository.countByStatus(UserStatus.ACTIVE),
+                userRepository.countByStatus(UserStatus.INACTIVE),
+                userRepository.countByStatus(UserStatus.SUSPENDED));
+
+        return new UserListResponse(users, counts);
     }
 }

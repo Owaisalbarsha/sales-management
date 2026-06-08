@@ -1,5 +1,7 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.service;
 
+import com.salesmanagement.identity.internal.controller.AuthController;
+import com.salesmanagement.identity.internal.entity.User;
 import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.shared.security.JwtTokenValidator;
 import io.jsonwebtoken.*;
@@ -104,7 +106,7 @@ public class JwtService implements JwtTokenValidator {
      * @param user the authenticated user for whom the token is issued
      * @return a signed, compact JWT string
      */
-    String generateAccessToken(User user) {
+    public String generateAccessToken(User user) {
         return buildToken(user, accessTokenExpiryMs, Map.of(
                 "userId", user.getId(),
                 "role",   user.getRole().name(),
@@ -125,7 +127,7 @@ public class JwtService implements JwtTokenValidator {
      * @param user the authenticated user for whom the token is issued
      * @return a signed, compact JWT string
      */
-    String generateRefreshToken(User user) {
+    public String generateRefreshToken(User user) {
         return buildToken(user, refreshTokenExpiryMs, Map.of(
                 "userId", user.getId(),
                 "type",   "refresh"
@@ -243,7 +245,7 @@ public class JwtService implements JwtTokenValidator {
      * @param token a validated JWT string
      * @return the UUID string embedded in the {@code jti} claim
      */
-    String extractJti(String token) {
+    public String extractJti(String token) {
         return parseClaims(token).getId();
     }
 
@@ -275,5 +277,24 @@ public class JwtService implements JwtTokenValidator {
      */
     private SecretKey signingKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Returns {@code true} only if the token is a valid refresh token —
+     * correct signature, not expired, AND carries {@code type: "refresh"}.
+     *
+     * <p>Prevents an access token from being submitted to the refresh endpoint
+     * to mint new token pairs. The {@code type} claim is the discriminator.
+     *
+     * @param token the raw JWT string
+     * @return {@code true} if this is a valid refresh token
+     */
+    public boolean isRefreshToken(String token) {
+        try {
+            String type = parseClaims(token).get("type", String.class);
+            return "refresh".equals(type);
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
     }
 }

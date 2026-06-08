@@ -1,7 +1,7 @@
 package com.salesmanagement.identity.internal.dto;
 
-import com.salesmanagement.identity.internal.User;
-import com.salesmanagement.identity.internal.UserStatus;
+import com.salesmanagement.identity.internal.entity.User;
+import com.salesmanagement.identity.internal.entity.UserStatus;
 import com.salesmanagement.shared.security.UserRole;
 
 import java.time.Instant;

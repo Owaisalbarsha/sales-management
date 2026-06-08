@@ -1,5 +1,8 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.service;
 
+import com.salesmanagement.identity.internal.controller.AuthController;
+import com.salesmanagement.identity.internal.entity.User;
+import com.salesmanagement.identity.internal.entity.UserStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

@@ -1,4 +1,4 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.service;
 
 import com.salesmanagement.shared.security.TokenBlacklistChecker;
 import lombok.RequiredArgsConstructor;

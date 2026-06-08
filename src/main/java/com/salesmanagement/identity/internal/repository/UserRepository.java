@@ -1,8 +1,8 @@
 package com.salesmanagement.identity.internal.repository;
 
-import com.salesmanagement.identity.internal.User;
-import com.salesmanagement.identity.internal.UserService;
-import com.salesmanagement.identity.internal.UserStatus;
+import com.salesmanagement.identity.internal.entity.User;
+import com.salesmanagement.identity.internal.service.UserService;
+import com.salesmanagement.identity.internal.entity.UserStatus;
 import com.salesmanagement.shared.security.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 

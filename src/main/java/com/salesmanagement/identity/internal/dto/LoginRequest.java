@@ -1,5 +1,6 @@
 package com.salesmanagement.identity.internal.dto;
 
+import com.salesmanagement.identity.internal.service.UserService;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -20,7 +21,7 @@ public record LoginRequest(
 
         /**
          * The user's registered email address, used as the login identifier.
-         * Lowercased before lookup in {@link com.salesmanagement.identity.internal.UserService}
+         * Lowercased before lookup in {@link UserService}
          * to ensure case-insensitive matching regardless of how the user types it.
          */
         @NotBlank(message = "Email is required")

@@ -1,7 +1,7 @@
 package com.salesmanagement.identity.api;
 
-import com.salesmanagement.identity.internal.UserService;
-import com.salesmanagement.identity.internal.User;
+import com.salesmanagement.identity.internal.service.UserService;
+import com.salesmanagement.identity.internal.entity.User;
 import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

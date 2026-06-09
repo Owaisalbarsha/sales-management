@@ -1,10 +1,14 @@
 package com.salesmanagement.identity.internal.repository;
 
-import com.salesmanagement.identity.internal.User;
-import com.salesmanagement.identity.internal.UserService;
-import com.salesmanagement.identity.internal.UserStatus;
+import com.salesmanagement.identity.internal.entity.User;
+import com.salesmanagement.identity.internal.service.UserService;
+import com.salesmanagement.identity.internal.entity.UserStatus;
 import com.salesmanagement.shared.security.UserRole;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -89,4 +93,48 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return all users in the specified status; empty list if none found
      */
     List<User> findByStatus(UserStatus status);
+
+    /**
+     * Searches and filters users with pagination.
+     *
+     * <p>All three filter parameters are optional — a {@code null} value means
+     * "do not filter by this field". This is the standard JPQL pattern for
+     * optional filters: {@code (:param IS NULL OR column = :param)}.
+     *
+     * <ul>
+     *   <li>{@code search} — matches against name OR email, case-insensitive,
+     *       partial match. {@code null} or blank returns all.</li>
+     *   <li>{@code role}   — exact role match. {@code null} returns all roles.</li>
+     *   <li>{@code status} — exact status match. {@code null} returns all statuses.</li>
+     * </ul>
+     *
+     * @param search partial name/email search term, or {@code null}
+     * @param role   role filter, or {@code null} for all
+     * @param status status filter, or {@code null} for all
+     * @param pageable pagination and sorting
+     * @return a page of matching users
+     */
+    @Query("""
+        SELECT u FROM User u
+        WHERE (:search = ''
+               OR LOWER(u.name)  LIKE LOWER(CONCAT('%', :search, '%'))
+               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))
+          AND (:role   IS NULL OR u.role   = :role)
+          AND (:status IS NULL OR u.status = :status)
+        """)
+    Page<User> search(@Param("search") String search,
+                      @Param("role")   UserRole role,
+                      @Param("status") UserStatus status,
+                      Pageable pageable);
+
+    /**
+     * Counts users with the given status.
+     * Called three times (once per status) to build {@code UserStatusCounts}.
+     * Three indexed COUNT queries are cheaper and clearer than one GROUP BY
+     * with manual result-set mapping.
+     *
+     * @param status the status to count
+     * @return number of users with that status
+     */
+    long countByStatus(UserStatus status);
 }

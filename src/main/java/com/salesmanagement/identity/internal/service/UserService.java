@@ -1,13 +1,24 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.service;
 
 import com.salesmanagement.identity.api.UserCreatedEvent;
+import com.salesmanagement.identity.internal.controller.AuthController;
+import com.salesmanagement.identity.internal.dto.UserListResponse;
+import com.salesmanagement.identity.internal.dto.UserResponse;
+import com.salesmanagement.identity.internal.dto.UserStatusCounts;
+import com.salesmanagement.identity.internal.entity.User;
+import com.salesmanagement.identity.internal.entity.UserStatus;
+import com.salesmanagement.identity.internal.controller.UserController;
 import com.salesmanagement.identity.internal.dto.CreateUserRequest;
 import com.salesmanagement.identity.internal.repository.UserRepository;
+import com.salesmanagement.shared.api.PageRequest;
+import com.salesmanagement.shared.api.PageResponse;
 import com.salesmanagement.shared.exception.BusinessException;
+import com.salesmanagement.shared.security.SecurityUtils;
 import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -53,9 +64,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserService implements UserDetailsService {
 
-    private final UserRepository           userRepository;
+    private final UserRepository            userRepository;
     private final PasswordEncoder          passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final SessionService            sessionService;
 
     // ─── Spring Security bridge ───────────────────────────────────────────────
 
@@ -125,7 +137,7 @@ public class UserService implements UserDetailsService {
      * @throws BusinessException if no user exists with the given email
      */
     @Transactional(readOnly = true)
-    User getByEmail(String email) {
+    public User getByEmail(String email) {
         return userRepository.findByEmail(email.toLowerCase())
                 .orElseThrow(() -> BusinessException.notFound(
                         "User not found with email: " + email,
@@ -142,7 +154,7 @@ public class UserService implements UserDetailsService {
      * @return all persisted users, in insertion order
      */
     @Transactional(readOnly = true)
-    List<User> getAll() {
+    public List<User> getAll() {
         return userRepository.findAll();
     }
 
@@ -156,7 +168,7 @@ public class UserService implements UserDetailsService {
      * @return users matching the given role; empty list if none exist
      */
     @Transactional(readOnly = true)
-    List<User> getByRole(UserRole role) {
+    public List<User> getByRole(UserRole role) {
         return userRepository.findByRole(role);
     }
 
@@ -181,12 +193,12 @@ public class UserService implements UserDetailsService {
      * deactivates the old account and creates a new one. This keeps the
      * historical records (visits, invoices) tied to the original role identity.
      *
-     * @param request validated inbound DTO from {@link com.salesmanagement.identity.internal.UserController}
+     * @param request validated inbound DTO from {@link UserController}
      * @return the newly created and persisted {@link User} entity
      * @throws BusinessException if the email address is already registered
      */
     @Transactional
-    User create(CreateUserRequest request) {
+    public User create(CreateUserRequest request) {
         if (userRepository.existsByEmail(request.email().toLowerCase())) {
             throw BusinessException.conflict(
                     "Email already in use: " + request.email(),
@@ -231,36 +243,90 @@ public class UserService implements UserDetailsService {
      * @throws BusinessException if no user exists with the given ID
      */
     @Transactional
-    void updateStatus(Long userId, UserStatus newStatus) {
-        User user = getById(userId);
+    public void updateStatus(Long userId, UserStatus newStatus) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        if (userId.equals(currentUserId)) {
+            throw BusinessException.badRequest(
+                    "You cannot change your own account status",
+                    "CANNOT_MODIFY_SELF");
+        }
 
+        User user = getById(userId);
         switch (newStatus) {
             case ACTIVE    -> user.activate();
             case INACTIVE  -> user.deactivate();
             case SUSPENDED -> user.suspend();
         }
 
+        // Kick the user out immediately if they were deactivated or suspended,
+        // otherwise their existing access token stays valid for up to 15 minutes.
+        if (newStatus != UserStatus.ACTIVE) {
+            sessionService.invalidateSession(userId);
+        }
+
         log.info("User status updated: id={}, newStatus={}", userId, newStatus);
     }
 
     @Transactional
-    void resetPassword(Long userId, String newRawPassword) {
+    public void resetPassword(Long userId, String newRawPassword) {
         User user = getById(userId);
         user.setPasswordHash(passwordEncoder.encode(newRawPassword));
+        sessionService.invalidateSession(userId);  // compromised tokens die now
         log.info("Password reset by admin for userId={}", userId);
     }
 
     @Transactional
-    void changePassword(Long userId, String currentRawPassword, String newRawPassword) {
+    public void changePassword(Long userId, String currentRawPassword, String newRawPassword) {
         User user = getById(userId);
 
         if (!passwordEncoder.matches(currentRawPassword, user.getPasswordHash())) {
             throw BusinessException.badRequest(
-                    "Current password is incorrect",
-                    "WRONG_PASSWORD");
+                    "Current password is incorrect", "WRONG_PASSWORD");
         }
 
         user.setPasswordHash(passwordEncoder.encode(newRawPassword));
+        sessionService.invalidateSession(userId);  // force re-login with new password
         log.info("Password changed by user: userId={}", userId);
+    }
+
+    /**
+     * Searches, filters, and paginates users, and computes global status counts.
+     *
+     * <p>This is the single backing method for the user management screen
+     * ({@code GET /api/users}). It performs:
+     * <ol>
+     *   <li>A paginated search with optional name/email, role, and status filters.</li>
+     *   <li>Three global status counts for the dashboard summary cards.</li>
+     * </ol>
+     *
+     * <p>The blank search term is normalised to {@code null} so an empty query
+     * string behaves as "no search" rather than matching on an empty pattern.
+     *
+     * @param search   optional name/email search term (blank treated as null)
+     * @param role     optional role filter
+     * @param status   optional status filter
+     * @param pageRequest pagination and sorting parameters from the controller
+     * @return combined paginated list and global status counts
+     */
+    @Transactional(readOnly = true)
+    public UserListResponse searchUsers(String search,
+                                        UserRole role,
+                                        UserStatus status,
+                                        PageRequest pageRequest) {
+
+        String normalisedSearch = (search == null || search.isBlank()) ? "" : search.trim();
+
+        Page<User> page = userRepository.search(
+                normalisedSearch, role, status, pageRequest.toPageable());
+
+        PageResponse<UserResponse> users =
+                PageResponse.of(page.map(UserResponse::from));
+
+        UserStatusCounts counts = UserStatusCounts.of(
+                userRepository.countByStatus(UserStatus.ACTIVE),
+                userRepository.countByStatus(UserStatus.INACTIVE),
+                userRepository.countByStatus(UserStatus.SUSPENDED));
+
+        return new UserListResponse(users, counts);
     }
 }

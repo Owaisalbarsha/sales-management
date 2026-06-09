@@ -1,8 +1,14 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.controller;
 
+import com.salesmanagement.identity.internal.service.TokenBlacklistStore;
+import com.salesmanagement.identity.internal.entity.User;
 import com.salesmanagement.identity.internal.dto.ChangePasswordRequest;
 import com.salesmanagement.identity.internal.dto.LoginRequest;
 import com.salesmanagement.identity.internal.dto.LoginResponse;
+import com.salesmanagement.identity.internal.service.JwtService;
+import com.salesmanagement.identity.internal.service.LoginAttemptService;
+import com.salesmanagement.identity.internal.service.SessionService;
+import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.api.ApiResponse;
 import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.shared.security.SecurityUtils;
@@ -57,8 +63,8 @@ public class AuthController {
     private final UserService           userService;
     private final JwtService            jwtService;
     private final SessionService        sessionService;
-    private final LoginAttemptService   loginAttemptService;
-    private final TokenBlacklistStore   blacklistStore;
+    private final LoginAttemptService loginAttemptService;
+    private final TokenBlacklistStore blacklistStore;
 
     // ─── Endpoints ────────────────────────────────────────────────────────────
 
@@ -142,10 +148,10 @@ public class AuthController {
 
         String refreshToken = extractBearerToken(bearerToken);
 
-        if (!jwtService.isTokenValid(refreshToken)) {
+        if (!jwtService.isRefreshToken(refreshToken)) {
             throw BusinessException.badRequest(
-                    "Refresh token is invalid or expired",
-                    "INVALID_REFRESH_TOKEN");
+                    "Provided token is not a valid refresh token",
+                    "NOT_A_REFRESH_TOKEN");
         }
 
         // ── Blacklist check — the filter is skipped for this endpoint ────
@@ -196,7 +202,7 @@ public class AuthController {
         String token  = extractBearerToken(bearerToken);
         long   userId = jwtService.extractUserId(token);
 
-        sessionService.invalidateSession(jwtService.extractUserId(token));
+        sessionService.invalidateSession(userId);
 
         log.info("Logout successful: userId={}", userId);
 

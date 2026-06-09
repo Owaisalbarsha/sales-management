@@ -1,4 +1,4 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.entity;
 
 /**
  * Lifecycle status of a {@link User} account.

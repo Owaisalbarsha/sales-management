@@ -1,5 +1,6 @@
-package com.salesmanagement.identity.internal;
+package com.salesmanagement.identity.internal.entity;
 
+import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.domain.BaseEntity;
 import com.salesmanagement.shared.security.UserRole;
 import jakarta.persistence.*;

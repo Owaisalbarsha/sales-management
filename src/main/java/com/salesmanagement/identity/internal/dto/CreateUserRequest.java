@@ -1,5 +1,6 @@
 package com.salesmanagement.identity.internal.dto;
 
+import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.security.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -14,7 +15,7 @@ import jakarta.validation.constraints.Size;
  * the system is a closed, company-internal tool with controlled access.
  *
  * <p>The raw {@code password} supplied here is encoded by
- * {@code PasswordEncoder} inside {@link com.salesmanagement.identity.internal.UserService# create}
+ * {@code PasswordEncoder} inside {@link UserService# create}
  * before persisting. It is never stored or logged in plain text.
  *
  * <p>Email is stored lowercased to guarantee case-insensitive uniqueness

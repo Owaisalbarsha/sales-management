@@ -314,7 +314,7 @@ public class UserService implements UserDetailsService {
                                         UserStatus status,
                                         PageRequest pageRequest) {
 
-        String normalisedSearch = (search == null || search.isBlank()) ? null : search.trim();
+        String normalisedSearch = (search == null || search.isBlank()) ? "" : search.trim();
 
         Page<User> page = userRepository.search(
                 normalisedSearch, role, status, pageRequest.toPageable());

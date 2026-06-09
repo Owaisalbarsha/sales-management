@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  *
  * <p><b>Key:</b> the {@code jti} UUID claim embedded in every JWT by
- * {@link JwtService#buildToken}. {@code JwtAuthFilter} extracts this via
+ * . {@code JwtAuthFilter} extracts this via
  * {@code claims.getId()} and passes it to
  * {@link com.salesmanagement.shared.security.TokenBlacklistChecker#isBlacklisted}.
  * Keying on {@code jti} rather than the raw token string keeps entries small —

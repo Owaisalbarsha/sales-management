@@ -116,7 +116,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @Query("""
         SELECT u FROM User u
-        WHERE (:search IS NULL
+        WHERE (:search = ''
                OR LOWER(u.name)  LIKE LOWER(CONCAT('%', :search, '%'))
                OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))
           AND (:role   IS NULL OR u.role   = :role)

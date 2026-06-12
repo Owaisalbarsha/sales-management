@@ -1,4 +1,4 @@
-package com.salesmanagement.territory.internal;
+package com.salesmanagement.territory.internal.controller;
 
 import com.salesmanagement.shared.api.ApiResponse;
 import com.salesmanagement.shared.api.PageRequest;
@@ -55,8 +55,14 @@ public class TerritoryController {
      * Accepts ?page, ?size, ?sortBy, ?sortDir as query params.
      */
     @GetMapping
-    public ApiResponse<PageResponse<TerritoryResponse>> list(@Valid PageRequest pageRequest) {
-        return ApiResponse.ok(territoryService.list(pageRequest.toPageable()));
+    public ApiResponse<PageResponse<TerritoryResponse>> list(
+            @Valid PageRequest pageRequest,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false, defaultValue = "false") boolean all
+    ) {
+        return ApiResponse.ok(
+                territoryService.list(search, all, pageRequest.toPageable())
+        );
     }
 
     /**

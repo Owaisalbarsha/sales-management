@@ -12,20 +12,20 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
     @Bean
-    public OpenAPI salesManagementOpenAPI() {
+    public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
                         .title("Sales Management API")
-                        .description("Integrated Field Sales and Distribution Management System")
-                        .version("1.0.0"))
-                .addSecurityItem(new SecurityRequirement().addList("Bearer Auth"))
+                        .version("1.0")
+                        .description("Sales Management System REST API"))
+                .addSecurityItem(new SecurityRequirement().addList("Bearer Token"))
                 .components(new Components()
-                        .addSecuritySchemes("Bearer Auth",
+                        .addSecuritySchemes("Bearer Token",
                                 new SecurityScheme()
+                                        .name("Authorization")
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
-                                        .description("Paste your JWT token from /api/auth/login")
-                        ));
+                                        .description("Paste the access token from /api/auth/login")));
     }
 }

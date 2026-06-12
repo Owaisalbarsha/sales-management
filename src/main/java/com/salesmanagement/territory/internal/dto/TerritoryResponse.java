@@ -1,6 +1,6 @@
 package com.salesmanagement.territory.internal.dto;
 
-import com.salesmanagement.territory.internal.Territory;
+import com.salesmanagement.territory.internal.entity.Territory;
 
 import java.time.Instant;
 

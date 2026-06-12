@@ -1,6 +1,8 @@
 package com.salesmanagement.territory.internal.repository;
 
-import com.salesmanagement.territory.internal.Territory;
+import com.salesmanagement.territory.internal.entity.Territory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
@@ -33,4 +35,6 @@ public interface TerritoryRepository extends JpaRepository<Territory, Long> {
      * @return {@code true} if another territory already uses this name
      */
     boolean existsByNameAndIdNot(String name, Long id);
+
+    Page<Territory> findByNameContainingIgnoreCase(String name, Pageable pageable);
 }

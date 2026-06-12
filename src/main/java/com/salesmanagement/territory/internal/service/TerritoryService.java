@@ -2,7 +2,7 @@ package com.salesmanagement.territory.internal.service;
 
 import com.salesmanagement.shared.api.PageResponse;
 import com.salesmanagement.shared.exception.BusinessException;
-import com.salesmanagement.territory.internal.Territory;
+import com.salesmanagement.territory.internal.entity.Territory;
 import com.salesmanagement.territory.internal.dto.CreateTerritoryRequest;
 import com.salesmanagement.territory.internal.dto.TerritoryResponse;
 import com.salesmanagement.territory.internal.dto.UpdateTerritoryRequest;
@@ -10,9 +10,13 @@ import com.salesmanagement.territory.internal.repository.TerritoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 /**
  * Business logic for the territory module.
@@ -75,10 +79,38 @@ public class TerritoryService {
      * @param pageable pagination/sort, built from the request's {@code PageRequest}
      * @return a page of territory response DTOs in the unified page envelope
      */
-    public PageResponse<TerritoryResponse> list(Pageable pageable) {
-        return PageResponse.of(
-                territoryRepository.findAll(pageable).map(TerritoryResponse::from));
+    public PageResponse<TerritoryResponse> list(String q,
+                                                boolean all,
+                                                Pageable pageable) {
+
+        String normalized = (q == null || q.isBlank()) ? null : q.trim();
+
+        Page<Territory> page;
+
+        if (all) {
+            // Return all territories in a synthetic Page
+            List<TerritoryResponse> allItems = territoryRepository.findAll()
+                    .stream()
+                    .map(TerritoryResponse::from)
+                    .toList();
+
+            Page<TerritoryResponse> synthetic = new PageImpl<>(
+                    allItems,
+                    Pageable.unpaged(),
+                    allItems.size()
+            );
+
+            return PageResponse.of(synthetic);
+        }
+
+        // Normal paginated search
+        page = (normalized == null)
+                ? territoryRepository.findAll(pageable)
+                : territoryRepository.findByNameContainingIgnoreCase(normalized, pageable);
+
+        return PageResponse.of(page.map(TerritoryResponse::from));
     }
+
 
     /**
      * Fully updates an existing territory.

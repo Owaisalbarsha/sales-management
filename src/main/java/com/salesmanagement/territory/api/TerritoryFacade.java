@@ -1,7 +1,7 @@
 package com.salesmanagement.territory.api;
 
 import com.salesmanagement.shared.exception.BusinessException;
-import com.salesmanagement.territory.internal.Territory;
+import com.salesmanagement.territory.internal.entity.Territory;
 import com.salesmanagement.territory.internal.repository.TerritoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

@@ -1,4 +1,4 @@
-package com.salesmanagement.territory.internal;
+package com.salesmanagement.territory.internal.entity;
 
 import com.salesmanagement.shared.domain.BaseEntity;
 import jakarta.persistence.Entity;

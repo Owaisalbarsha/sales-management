@@ -1,4 +1,4 @@
-package com.salesmanagement.customer.internal.contoller;
+package com.salesmanagement.customer.internal.controller;
 
 import com.salesmanagement.customer.internal.CustomerStatus;
 import com.salesmanagement.customer.internal.dto.ChangeCustomerStatusRequest;

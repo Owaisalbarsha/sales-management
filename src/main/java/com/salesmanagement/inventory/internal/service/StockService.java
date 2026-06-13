@@ -1,0 +1,243 @@
+package com.salesmanagement.inventory.internal.service;
+
+import com.salesmanagement.identity.api.UserFacade;
+import com.salesmanagement.inventory.internal.VanInventoryItem;
+import com.salesmanagement.inventory.internal.WarehouseStockItem;
+import com.salesmanagement.inventory.internal.dto.VanInventoryResponse;
+import com.salesmanagement.inventory.internal.dto.WarehouseStockResponse;
+import com.salesmanagement.inventory.internal.repository.ProductRepository;
+import com.salesmanagement.inventory.internal.repository.VanInventoryItemRepository;
+import com.salesmanagement.inventory.internal.repository.WarehouseStockItemRepository;
+import com.salesmanagement.shared.api.PageResponse;
+import com.salesmanagement.shared.exception.BusinessException;
+import com.salesmanagement.shared.security.UserRole;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+/**
+ * Business logic for stock movement — warehouse stock, van inventory, and the
+ * transfers between them. The only writer of {@link WarehouseStockItem} and
+ * {@link VanInventoryItem}.
+ *
+ * <p><strong>Why the stock-movement methods live here and are exposed on the facade:</strong>
+ * other modules ({@code invoicing}, {@code restock}) must change stock, but they may not
+ * touch this module's tables directly. So the logic that owns the BR-4 invariant lives in
+ * this module and is reached through {@code InventoryFacade}:</p>
+ * <ul>
+ *   <li>{@link #deductVanStock} — called by {@code invoicing} when a rep sells off the van (BR-4);</li>
+ *   <li>{@link #transferWarehouseToVan} — called by {@code restock} when a request is approved.</li>
+ * </ul>
+ *
+ * <p><strong>Concurrency (BR-4):</strong> every stock change is an atomic guarded SQL
+ * statement (see the repositories). The check ("is there enough?") and the write
+ * ("subtract") happen in one indivisible operation, so two concurrent deductions cannot
+ * both pass. A guarded statement that changes 0 rows is treated as a refusal. The DB
+ * {@code CHECK (quantity >= 0)} constraints are the final backstop.</p>
+ *
+ * <p><strong>Cross-module dependency:</strong> {@link UserFacade} is the only thing this
+ * module imports from {@code identity}, used to enforce the ERD rule that a van's owner
+ * must be a {@code SALES_REP} (a DB FK cannot express the role condition).</p>
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class StockService {
+
+    private final WarehouseStockItemRepository warehouseRepo;
+    private final VanInventoryItemRepository vanRepo;
+    private final ProductRepository productRepository;
+    private final UserFacade userFacade;
+
+    // ── Warehouse: reads ──────────────────────────────────────────────────────
+
+    /**
+     * @throws BusinessException 404 if no warehouse stock row exists for the product
+     */
+    public WarehouseStockResponse getWarehouseStock(Long productId) {
+        return WarehouseStockResponse.from(findWarehouseRowOrThrow(productId));
+    }
+
+    /**
+     * Page of warehouse stock, optionally filtered to one product and/or to low-stock
+     * rows ({@code quantity < minStockLevel}, FR-32).
+     */
+    public PageResponse<WarehouseStockResponse> listWarehouseStock(Long productId,
+                                                                   boolean lowStock,
+                                                                   Pageable pageable) {
+        return PageResponse.of(
+                warehouseRepo.search(productId, lowStock, pageable).map(WarehouseStockResponse::from));
+    }
+
+    // ── Warehouse: writes (ADMIN / WAREHOUSE_MANAGER) ─────────────────────────
+
+    /**
+     * Sets the absolute on-hand quantity for a product (initial count or stock-take
+     * correction). Creates the warehouse row if it does not exist yet.
+     *
+     * @throws BusinessException 404 if the product does not exist
+     */
+    @Transactional
+    public WarehouseStockResponse setWarehouseStock(Long productId, int quantity) {
+        requireProductExists(productId);
+        WarehouseStockItem item = warehouseRepo.findByProductId(productId).orElse(null);
+        if (item == null) {
+            item = warehouseRepo.save(
+                    new WarehouseStockItem(productRepository.getReferenceById(productId), quantity));
+            log.info("Created warehouse stock for productId={} at quantity={}", productId, quantity);
+        } else {
+            item.setQuantity(quantity);
+            log.info("Set warehouse stock for productId={} to quantity={}", productId, quantity);
+        }
+        return WarehouseStockResponse.from(item);
+    }
+
+    /**
+     * Receives an incoming shipment — adds {@code quantity} to the product's warehouse
+     * row atomically, creating the row if it does not exist yet.
+     *
+     * @throws BusinessException 400 if quantity is not positive; 404 if product is unknown
+     */
+    @Transactional
+    public WarehouseStockResponse receiveWarehouseStock(Long productId, int quantity) {
+        requirePositive(quantity);
+        requireProductExists(productId);
+        int updated = warehouseRepo.increment(productId, quantity);
+        if (updated == 0) {
+            // No row yet — first receipt for this product.
+            warehouseRepo.save(new WarehouseStockItem(productRepository.getReferenceById(productId), quantity));
+            log.info("Created warehouse stock for productId={} on receipt of quantity={}", productId, quantity);
+        } else {
+            log.info("Received quantity={} into warehouse stock for productId={}", quantity, productId);
+        }
+        return getWarehouseStock(productId);
+    }
+
+    // ── Van: reads ────────────────────────────────────────────────────────────
+
+    /**
+     * The products currently loaded on a representative's van (empty if none).
+     */
+    public List<VanInventoryResponse> getVanInventory(Long representativeId) {
+        return vanRepo.findByRepresentative(representativeId).stream()
+                .map(VanInventoryResponse::from)
+                .toList();
+    }
+
+    // ── Cross-module stock movements (reached via InventoryFacade) ────────────
+
+    /**
+     * BR-4: atomically deduct sold quantity from a rep's van. Used by {@code invoicing}.
+     *
+     * <p>The guarded UPDATE subtracts only if enough is present; if it changes 0 rows the
+     * deduction is refused. We then read the row (failure path only — not hot) to return a
+     * precise 422: either the product was never loaded, or there was not enough.</p>
+     *
+     * @throws BusinessException 400 if quantity is not positive;
+     *                           422 {@code VAN_PRODUCT_NOT_LOADED} if no such van row;
+     *                           422 {@code INSUFFICIENT_STOCK} if quantity is too low
+     */
+    @Transactional
+    public void deductVanStock(Long representativeId, Long productId, int quantity) {
+        requirePositive(quantity);
+
+        int updated = vanRepo.deductIfSufficient(representativeId, productId, quantity);
+        if (updated == 0) {
+            VanInventoryItem existing =
+                    vanRepo.findByRepresentativeIdAndProductId(representativeId, productId).orElse(null);
+            if (existing == null) {
+                throw BusinessException.unprocessable(
+                        "Representative " + representativeId + " has no stock of product " + productId
+                                + " loaded on the van",
+                        "VAN_PRODUCT_NOT_LOADED");
+            }
+            throw BusinessException.unprocessable(
+                    "Insufficient van stock for product " + productId + ": requested " + quantity
+                            + ", available " + existing.getQuantity(),
+                    "INSUFFICIENT_STOCK");
+        }
+        log.info("Deducted quantity={} from van of representativeId={} for productId={}",
+                quantity, representativeId, productId);
+    }
+
+    /**
+     * Restock approval: atomically move {@code quantity} of a product from the warehouse to
+     * a rep's van. Used by {@code restock}. The warehouse cannot go below zero; the rep must
+     * be a {@code SALES_REP} (ERD rule).
+     *
+     * <p>Approving a multi-line restock means the caller invokes this once per line inside
+     * its own transaction, so the whole approval is all-or-nothing.</p>
+     *
+     * @throws BusinessException 400 if quantity is not positive;
+     *                           404 if the rep or product does not exist;
+     *                           422 {@code NOT_A_SALES_REP} if the user is not a sales rep;
+     *                           422 {@code INSUFFICIENT_WAREHOUSE_STOCK} if the warehouse lacks stock
+     */
+    @Transactional
+    public void transferWarehouseToVan(Long representativeId, Long productId, int quantity) {
+        requirePositive(quantity);
+        requireSalesRep(representativeId);
+        requireProductExists(productId);
+
+        // 1. Take from the warehouse — atomic, cannot go below zero.
+        int deducted = warehouseRepo.deductIfSufficient(productId, quantity);
+        if (deducted == 0) {
+            boolean hasRow = warehouseRepo.existsByProductId(productId);
+            throw BusinessException.unprocessable(
+                    hasRow
+                            ? "Insufficient warehouse stock for product " + productId + " to transfer " + quantity
+                            : "No warehouse stock record for product " + productId,
+                    "INSUFFICIENT_WAREHOUSE_STOCK");
+        }
+
+        // 2. Add to the rep's van — atomic increment if the row exists, else insert.
+        int incremented = vanRepo.increment(representativeId, productId, quantity);
+        if (incremented == 0) {
+            vanRepo.save(new VanInventoryItem(
+                    representativeId, productRepository.getReferenceById(productId), quantity));
+        }
+
+        log.info("Transferred quantity={} of productId={} from warehouse to van of representativeId={}",
+                quantity, productId, representativeId);
+
+        // DEFERRED (Notification module): if the warehouse quantity has now dropped below
+        // product.minStockLevel, publish a WarehouseStockLowEvent here so the notification
+        // module can alert the WAREHOUSE_MANAGER (FR-32 / FR-106). Intentionally not wired
+        // yet — no listener exists, and the event's shape will be driven by that module.
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private WarehouseStockItem findWarehouseRowOrThrow(Long productId) {
+        return warehouseRepo.findByProductId(productId)
+                .orElseThrow(() -> BusinessException.notFound(
+                        "No warehouse stock record for product " + productId, "WAREHOUSE_STOCK_NOT_FOUND"));
+    }
+
+    private void requireProductExists(Long productId) {
+        if (!productRepository.existsById(productId)) {
+            throw BusinessException.notFound("Product not found: " + productId, "PRODUCT_NOT_FOUND");
+        }
+    }
+
+    /** Enforces the ERD rule that only a {@code SALES_REP} may own van inventory. */
+    private void requireSalesRep(Long representativeId) {
+        UserRole role = userFacade.getRoleById(representativeId); // 404 if the user does not exist
+        if (role != UserRole.SALES_REP) {
+            throw BusinessException.unprocessable(
+                    "User " + representativeId + " is not a SALES_REP and cannot own van inventory",
+                    "NOT_A_SALES_REP");
+        }
+    }
+
+    private void requirePositive(int quantity) {
+        if (quantity <= 0) {
+            throw BusinessException.badRequest("Quantity must be greater than zero", "INVALID_QUANTITY");
+        }
+    }
+}

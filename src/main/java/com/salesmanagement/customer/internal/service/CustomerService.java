@@ -12,9 +12,13 @@ import com.salesmanagement.territory.api.TerritoryFacade;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Business logic for the customer module.
@@ -69,7 +73,7 @@ public class CustomerService {
 
         log.info("Created customer id={} name='{}' territoryId={}",
                 saved.getId(), saved.getName(), saved.getTerritoryId());
-        return CustomerResponse.from(saved);
+        return CustomerResponse.from(saved, territoryNameOf(saved));
     }
 
     /**
@@ -78,7 +82,7 @@ public class CustomerService {
      * @throws BusinessException 404 if no customer has this id
      */
     public CustomerResponse getById(Long id) {
-        return CustomerResponse.from(findOrThrow(id));
+        return CustomerResponse.from(findOrThrow(id), territoryNameOf(findOrThrow(id)));
     }
 
     /**
@@ -93,10 +97,20 @@ public class CustomerService {
                                                CustomerStatus status,
                                                String q,
                                                Pageable pageable) {
-        String normalized = (q == null || q.isBlank()) ? null : q.trim();
-        return PageResponse.of(
-                customerRepository.search(territoryId, status, normalized, pageable)
-                        .map(CustomerResponse::from));
+        String normalized = (q == null) ? "" : q.trim();
+        Page<Customer> page = customerRepository.search(territoryId, status, normalized, pageable);
+
+        // Batch territory lookup: one map for all rows on this page.
+        Map<Long, String> namesById = page.getContent().stream()
+                .map(Customer::getTerritoryId)
+                .distinct()
+                .collect(Collectors.toMap(
+                        id -> id,
+                        id -> territoryFacade.getTerritoryInfo(id).name()
+                ));
+
+        return PageResponse.of(page.map(c ->
+                CustomerResponse.from(c, namesById.get(c.getTerritoryId()))));
     }
 
     /**
@@ -127,7 +141,7 @@ public class CustomerService {
         if (request.category() != null)  customer.setCategory(request.category());
 
         log.info("Updated customer id={}", id);
-        return CustomerResponse.from(customer);
+        return CustomerResponse.from(customer, territoryNameOf(customer));
     }
 
     /**
@@ -146,7 +160,7 @@ public class CustomerService {
         }
         customer.setStatus(targetStatus);
         log.info("Changed customer id={} status to {}", id, targetStatus);
-        return CustomerResponse.from(customer);
+        return CustomerResponse.from(customer, territoryNameOf(customer));
     }
 
     /**
@@ -191,5 +205,9 @@ public class CustomerService {
             throw BusinessException.badRequest(
                     "Territory does not exist: " + territoryId, "TERRITORY_NOT_FOUND");
         }
+    }
+
+    private String territoryNameOf(Customer c) {
+        return territoryFacade.getTerritoryInfo(c.getTerritoryId()).name();
     }
 }

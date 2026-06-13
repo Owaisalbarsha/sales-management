@@ -30,6 +30,7 @@ import java.time.Instant;
 public record CustomerResponse(
         Long             id,
         Long             territoryId,
+        String           territoryName,
         String           name,
         String           address,
         String           phone,
@@ -46,10 +47,11 @@ public record CustomerResponse(
      * @param c the entity to map; must not be {@code null}
      * @return the corresponding response DTO
      */
-    public static CustomerResponse from(Customer c) {
+    public static CustomerResponse from(Customer c, String territoryName) {
         return new CustomerResponse(
                 c.getId(),
                 c.getTerritoryId(),
+                territoryName,
                 c.getName(),
                 c.getAddress(),
                 c.getPhone(),

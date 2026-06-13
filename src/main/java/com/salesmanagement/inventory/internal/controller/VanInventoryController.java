@@ -20,12 +20,9 @@ import java.util.List;
  * {@code SALES_REP} may view only their own. Van quantities are never mutated through a
  * REST endpoint — they change only via {@code InventoryFacade}
  * ({@code transferWarehouseToVan} on restock approval, {@code deductVanStock} on a sale),
- * which keeps the BR-4 invariant in one place.</p>
- *
- * <p><strong>Note — verify against your shared {@code UserPrincipal}:</strong> the
- * self-access clause {@code #representativeId == authentication.principal.id} assumes the
- * JWT principal exposes {@code getId()} returning the user's {@code Long} id. If your
- * {@code UserPrincipal} names that accessor differently, adjust the SpEL accordingly.</p>
+ * which keeps the BR-4 invariant in one place. The self-access clause uses
+ * {@code authentication.principal.userId} ({@code UserPrincipal.getUserId()}) so a
+ * {@code SALES_REP} can read only their own van.</p>
  */
 @RestController
 @RequestMapping("/api/inventory/van")
@@ -40,7 +37,7 @@ public class VanInventoryController {
      */
     @GetMapping("/{representativeId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER', 'SALES_MANAGER') "
-            + "or #representativeId == authentication.principal.id")
+            + "or #representativeId == authentication.principal.userId")
     public ApiResponse<List<VanInventoryResponse>> getByRepresentative(
             @PathVariable Long representativeId) {
         return ApiResponse.ok(stockService.getVanInventory(representativeId));

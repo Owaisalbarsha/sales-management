@@ -15,12 +15,12 @@ import java.math.BigDecimal;
  * Public API surface of the inventory module — the only type other modules may import
  * from inventory. Mirrors {@code CustomerFacade}/{@code TerritoryFacade}/{@code UserFacade}.
  *
- * <p>Unlike the customer facade (read-only), this facade also exposes two <em>write</em>
- * operations. That is deliberate: {@code invoicing} and {@code restock} must change stock,
+ * <p>Unlike the customer facade (read-only), this facade also exposes <em>write</em>
+ * operations. That is deliberate: {@code invoicing} and {@code vanops} must change stock,
  * but they may not touch this module's tables — so the stock-movement logic that owns the
  * BR-4 invariant lives here and is reached through the facade. Product reads go straight to
  * the repository (no business logic); the stock writes delegate to {@code StockService},
- * which owns the transaction and the atomic guards (business logic never lives in the
+ * which owns the transactions and the atomic guards (business logic never lives in the
  * facade itself, matching {@code UserFacade}).</p>
  */
 @Service
@@ -30,7 +30,7 @@ public class InventoryFacade {
     private final ProductRepository productRepository;
     private final StockService stockService;
 
-    // ── Product reads (used by invoicing, restock) ────────────────────────────
+    // ── Product reads (used by invoicing, vanops) ────────────────────────────
 
     /**
      * Public projection of a product.
@@ -50,7 +50,7 @@ public class InventoryFacade {
     }
 
     /**
-     * Whether a product exists. Lets {@code invoicing}/{@code restock} reject a bad
+     * Whether a product exists. Lets {@code invoicing}/{@code vanops} reject a bad
      * {@code productId} with their own domain error rather than a foreign-key violation.
      */
     @Transactional(readOnly = true)
@@ -90,13 +90,24 @@ public class InventoryFacade {
     }
 
     /**
-     * Restock approval: atomically move stock from the warehouse to a rep's van. Called by
-     * {@code restock}. Enforces the warehouse floor and the SALES_REP rule (see
-     * {@link StockService#transferWarehouseToVan}).
+     * Morning van load: atomically move stock from the warehouse to a rep's van. Called by
+     * {@code vanops} when a demand order is loaded. Enforces the warehouse floor and the
+     * SALES_REP rule (see {@link StockService#transferWarehouseToVan}).
      */
     @Transactional
     public void transferWarehouseToVan(Long representativeId, Long productId, int quantity) {
         stockService.transferWarehouseToVan(representativeId, productId, quantity);
+    }
+
+    /**
+     * End-of-day return: atomically move stock from a rep's van back to the warehouse.
+     * Called by {@code vanops} when a return sheet is completed. Deletes the van row when
+     * it reaches zero so tomorrow's load can re-insert it (see
+     * {@link StockService#returnVanToWarehouse}).
+     */
+    @Transactional
+    public void returnVanToWarehouse(Long representativeId, Long productId, int quantity) {
+        stockService.returnVanToWarehouse(representativeId, productId, quantity);
     }
 
     private Product findOrThrow(Long productId) {

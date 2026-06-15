@@ -25,12 +25,13 @@ import java.util.List;
  * {@link VanInventoryItem}.
  *
  * <p><strong>Why the stock-movement methods live here and are exposed on the facade:</strong>
- * other modules ({@code invoicing}, {@code restock}) must change stock, but they may not
+ * other modules ({@code invoicing}, {@code vanops}) must change stock, but they may not
  * touch this module's tables directly. So the logic that owns the BR-4 invariant lives in
  * this module and is reached through {@code InventoryFacade}:</p>
  * <ul>
  *   <li>{@link #deductVanStock} — called by {@code invoicing} when a rep sells off the van (BR-4);</li>
- *   <li>{@link #transferWarehouseToVan} — called by {@code restock} when a request is approved.</li>
+ *   <li>{@link #transferWarehouseToVan} — called by {@code vanops} when a demand order is loaded;</li>
+ *   <li>{@link #returnVanToWarehouse} — called by {@code vanops} on end-of-day return.</li>
  * </ul>
  *
  * <p><strong>Concurrency (BR-4):</strong> every stock change is an atomic guarded SQL
@@ -166,12 +167,12 @@ public class StockService {
     }
 
     /**
-     * Restock approval: atomically move {@code quantity} of a product from the warehouse to
-     * a rep's van. Used by {@code restock}. The warehouse cannot go below zero; the rep must
-     * be a {@code SALES_REP} (ERD rule).
+     * Morning van load: atomically move {@code quantity} of a product from the warehouse to
+     * a rep's van. Called by {@code vanops} when a demand order is loaded. The warehouse
+     * cannot go below zero; the rep must be a {@code SALES_REP} (ERD rule).
      *
-     * <p>Approving a multi-line restock means the caller invokes this once per line inside
-     * its own transaction, so the whole approval is all-or-nothing.</p>
+     * <p>Loading a multi-line demand order means the caller invokes this once per line inside
+     * its own transaction, so the whole load is all-or-nothing.</p>
      *
      * @throws BusinessException 400 if quantity is not positive;
      *                           404 if the rep or product does not exist;
@@ -209,6 +210,65 @@ public class StockService {
         // product.minStockLevel, publish a WarehouseStockLowEvent here so the notification
         // module can alert the WAREHOUSE_MANAGER (FR-32 / FR-106). Intentionally not wired
         // yet — no listener exists, and the event's shape will be driven by that module.
+    }
+
+    /**
+     * End-of-day return: atomically move {@code quantity} of a product from a rep's van back
+     * to the warehouse. Called by {@code vanops} when a return sheet is completed. The mirror
+     * of {@link #transferWarehouseToVan}.
+     *
+     * <p><strong>Van-row cleanup:</strong> if the return empties the van line (quantity hits
+     * zero), the row is <em>deleted</em>, not left at zero. The rationale is the
+     * {@code UNIQUE(representative_id, product_id)} constraint: a leftover zero row would
+     * block tomorrow's load from re-inserting the same (rep, product). Historical record of
+     * what came back lives on the return sheet document in {@code vanops}, not on the van
+     * ledger itself — the ledger is "now", documents are "history".</p>
+     *
+     * <p>Completing a multi-line return means the caller invokes this once per line inside
+     * its own transaction, so the whole return is all-or-nothing.</p>
+     *
+     * @throws BusinessException 400 if quantity is not positive;
+     *                           422 {@code VAN_PRODUCT_NOT_LOADED} if no such van row;
+     *                           422 {@code INSUFFICIENT_VAN_STOCK} if the van holds less than requested
+     */
+    @Transactional
+    public void returnVanToWarehouse(Long representativeId, Long productId, int quantity) {
+        requirePositive(quantity);
+
+        // 1. Take from the van — atomic, cannot go below zero. Same guard as a sale.
+        int deducted = vanRepo.deductIfSufficient(representativeId, productId, quantity);
+        if (deducted == 0) {
+            VanInventoryItem existing =
+                    vanRepo.findByRepresentativeIdAndProductId(representativeId, productId).orElse(null);
+            if (existing == null) {
+                throw BusinessException.unprocessable(
+                        "Representative " + representativeId + " has no stock of product " + productId
+                                + " loaded on the van",
+                        "VAN_PRODUCT_NOT_LOADED");
+            }
+            throw BusinessException.unprocessable(
+                    "Insufficient van stock for product " + productId + " to return: requested " + quantity
+                            + ", available " + existing.getQuantity(),
+                    "INSUFFICIENT_VAN_STOCK");
+        }
+
+        // 2. Add back to the warehouse — atomic increment if the row exists, else insert.
+        //    (Insert path is defensive: in practice the warehouse row will exist, since the
+        //    product had to be in the warehouse this morning to load the van in the first place.)
+        int incremented = warehouseRepo.increment(productId, quantity);
+        if (incremented == 0) {
+            warehouseRepo.save(new WarehouseStockItem(
+                    productRepository.getReferenceById(productId), quantity));
+        }
+
+        // 3. If the van row is now empty, delete it so tomorrow's load can re-insert (the
+        //    UNIQUE(rep, product) constraint would otherwise reject the new row).
+        vanRepo.findByRepresentativeIdAndProductId(representativeId, productId)
+                .filter(v -> v.getQuantity() == 0)
+                .ifPresent(vanRepo::delete);
+
+        log.info("Returned quantity={} of productId={} from van of representativeId={} to warehouse",
+                quantity, productId, representativeId);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

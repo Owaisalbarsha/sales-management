@@ -43,7 +43,7 @@ public class WarehouseStockController {
      * their reorder threshold — FR-32/FR-121). Pagination as usual.
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER', 'SALES_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER')")
     public ApiResponse<PageResponse<WarehouseStockResponse>> list(
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false, defaultValue = "false") boolean lowStock,
@@ -54,7 +54,7 @@ public class WarehouseStockController {
 
     /** Warehouse stock for one product. ADMIN, WAREHOUSE_MANAGER, or SALES_MANAGER. 404 if none. */
     @GetMapping("/{productId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER', 'SALES_MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER')")
     public ApiResponse<WarehouseStockResponse> getByProduct(@PathVariable Long productId) {
         return ApiResponse.ok(stockService.getWarehouseStock(productId));
     }

@@ -1,7 +1,7 @@
 package com.salesmanagement.inventory.internal.service;
 
-import com.salesmanagement.inventory.internal.Product;
-import com.salesmanagement.inventory.internal.ProductStatus;
+import com.salesmanagement.inventory.internal.entity.Product;
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import com.salesmanagement.inventory.internal.dto.CreateProductRequest;
 import com.salesmanagement.inventory.internal.dto.ProductResponse;
 import com.salesmanagement.inventory.internal.dto.UpdateProductRequest;

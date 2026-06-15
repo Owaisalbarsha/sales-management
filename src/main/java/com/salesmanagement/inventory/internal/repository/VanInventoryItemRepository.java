@@ -1,6 +1,6 @@
 package com.salesmanagement.inventory.internal.repository;
 
-import com.salesmanagement.inventory.internal.VanInventoryItem;
+import com.salesmanagement.inventory.internal.entity.VanInventoryItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

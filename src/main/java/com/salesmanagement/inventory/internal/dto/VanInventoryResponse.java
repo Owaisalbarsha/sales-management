@@ -1,6 +1,6 @@
 package com.salesmanagement.inventory.internal.dto;
 
-import com.salesmanagement.inventory.internal.VanInventoryItem;
+import com.salesmanagement.inventory.internal.entity.VanInventoryItem;
 
 /**
  * Response projection of a {@link VanInventoryItem} — one product line on a rep's van.

@@ -1,5 +1,6 @@
-package com.salesmanagement.inventory.internal;
+package com.salesmanagement.inventory.internal.entity;
 
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import com.salesmanagement.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

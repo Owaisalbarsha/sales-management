@@ -1,6 +1,6 @@
 package com.salesmanagement.inventory.internal.dto;
 
-import com.salesmanagement.inventory.internal.WarehouseStockItem;
+import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 
 import java.time.Instant;
 

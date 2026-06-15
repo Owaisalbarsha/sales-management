@@ -1,4 +1,4 @@
-package com.salesmanagement.inventory.internal;
+package com.salesmanagement.inventory.internal.entity;
 
 import com.salesmanagement.shared.domain.BaseEntity;
 import jakarta.persistence.Column;

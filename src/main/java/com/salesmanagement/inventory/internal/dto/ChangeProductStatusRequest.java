@@ -1,6 +1,6 @@
 package com.salesmanagement.inventory.internal.dto;
 
-import com.salesmanagement.inventory.internal.ProductStatus;
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import jakarta.validation.constraints.NotNull;
 
 /**

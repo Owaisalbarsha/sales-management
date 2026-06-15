@@ -1,4 +1,4 @@
-package com.salesmanagement.inventory.internal;
+package com.salesmanagement.inventory.internal.enums;
 
 /**
  * Lifecycle status of a {@code Product}.

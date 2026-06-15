@@ -1,6 +1,6 @@
 package com.salesmanagement.inventory.internal.repository;
 
-import com.salesmanagement.inventory.internal.WarehouseStockItem;
+import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

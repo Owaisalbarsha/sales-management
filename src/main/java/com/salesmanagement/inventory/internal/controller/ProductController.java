@@ -1,6 +1,6 @@
 package com.salesmanagement.inventory.internal.controller;
 
-import com.salesmanagement.inventory.internal.ProductStatus;
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import com.salesmanagement.inventory.internal.dto.ChangeProductStatusRequest;
 import com.salesmanagement.inventory.internal.dto.CreateProductRequest;
 import com.salesmanagement.inventory.internal.dto.ProductResponse;

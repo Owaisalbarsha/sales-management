@@ -1,7 +1,7 @@
 package com.salesmanagement.inventory.internal.dto;
 
-import com.salesmanagement.inventory.internal.Product;
-import com.salesmanagement.inventory.internal.ProductStatus;
+import com.salesmanagement.inventory.internal.entity.Product;
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;

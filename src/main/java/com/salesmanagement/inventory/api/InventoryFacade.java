@@ -1,7 +1,7 @@
 package com.salesmanagement.inventory.api;
 
-import com.salesmanagement.inventory.internal.Product;
-import com.salesmanagement.inventory.internal.ProductStatus;
+import com.salesmanagement.inventory.internal.entity.Product;
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import com.salesmanagement.inventory.internal.repository.ProductRepository;
 import com.salesmanagement.inventory.internal.service.StockService;
 import com.salesmanagement.shared.exception.BusinessException;

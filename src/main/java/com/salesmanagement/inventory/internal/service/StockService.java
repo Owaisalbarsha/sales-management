@@ -1,8 +1,8 @@
 package com.salesmanagement.inventory.internal.service;
 
 import com.salesmanagement.identity.api.UserFacade;
-import com.salesmanagement.inventory.internal.VanInventoryItem;
-import com.salesmanagement.inventory.internal.WarehouseStockItem;
+import com.salesmanagement.inventory.internal.entity.VanInventoryItem;
+import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 import com.salesmanagement.inventory.internal.dto.VanInventoryResponse;
 import com.salesmanagement.inventory.internal.dto.WarehouseStockResponse;
 import com.salesmanagement.inventory.internal.repository.ProductRepository;

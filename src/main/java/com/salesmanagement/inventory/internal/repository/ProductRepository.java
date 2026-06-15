@@ -1,7 +1,7 @@
 package com.salesmanagement.inventory.internal.repository;
 
-import com.salesmanagement.inventory.internal.Product;
-import com.salesmanagement.inventory.internal.ProductStatus;
+import com.salesmanagement.inventory.internal.entity.Product;
+import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

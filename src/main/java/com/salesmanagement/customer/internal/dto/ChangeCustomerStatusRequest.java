@@ -1,6 +1,6 @@
 package com.salesmanagement.customer.internal.dto;
 
-import com.salesmanagement.customer.internal.CustomerStatus;
+import com.salesmanagement.customer.internal.enums.CustomerStatus;
 import jakarta.validation.constraints.NotNull;
 
 /**

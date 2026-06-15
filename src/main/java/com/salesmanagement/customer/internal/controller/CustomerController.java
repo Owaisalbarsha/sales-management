@@ -1,6 +1,6 @@
 package com.salesmanagement.customer.internal.controller;
 
-import com.salesmanagement.customer.internal.CustomerStatus;
+import com.salesmanagement.customer.internal.enums.CustomerStatus;
 import com.salesmanagement.customer.internal.dto.ChangeCustomerStatusRequest;
 import com.salesmanagement.customer.internal.dto.CreateCustomerRequest;
 import com.salesmanagement.customer.internal.dto.CustomerResponse;

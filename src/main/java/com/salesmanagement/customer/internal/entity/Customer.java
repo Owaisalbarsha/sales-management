@@ -1,5 +1,7 @@
 package com.salesmanagement.customer.internal;
 
+import com.salesmanagement.customer.internal.enums.CustomerCategory;
+import com.salesmanagement.customer.internal.enums.CustomerStatus;
 import com.salesmanagement.shared.domain.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

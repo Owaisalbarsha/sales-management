@@ -1,6 +1,6 @@
 package com.salesmanagement.customer.internal.dto;
 
-import com.salesmanagement.customer.internal.CustomerCategory;
+import com.salesmanagement.customer.internal.enums.CustomerCategory;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;

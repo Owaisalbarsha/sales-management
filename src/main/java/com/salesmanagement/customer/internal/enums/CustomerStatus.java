@@ -1,4 +1,4 @@
-package com.salesmanagement.customer.internal;
+package com.salesmanagement.customer.internal.enums;
 
 /**
  * Lifecycle status of a {@code Customer}.

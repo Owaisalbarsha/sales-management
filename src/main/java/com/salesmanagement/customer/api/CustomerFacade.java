@@ -1,7 +1,7 @@
 package com.salesmanagement.customer.api;
 
 import com.salesmanagement.customer.internal.Customer;
-import com.salesmanagement.customer.internal.CustomerStatus;
+import com.salesmanagement.customer.internal.enums.CustomerStatus;
 import com.salesmanagement.customer.internal.repository.CustomerRepository;
 import com.salesmanagement.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;

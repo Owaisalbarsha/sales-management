@@ -1,7 +1,7 @@
 package com.salesmanagement.customer.internal.repository;
 
 import com.salesmanagement.customer.internal.Customer;
-import com.salesmanagement.customer.internal.CustomerStatus;
+import com.salesmanagement.customer.internal.enums.CustomerStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

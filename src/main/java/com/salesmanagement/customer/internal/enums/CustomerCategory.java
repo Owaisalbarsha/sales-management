@@ -1,4 +1,4 @@
-package com.salesmanagement.customer.internal;
+package com.salesmanagement.customer.internal.enums;
 
 /**
  * Outlet classification of a {@code Customer}.

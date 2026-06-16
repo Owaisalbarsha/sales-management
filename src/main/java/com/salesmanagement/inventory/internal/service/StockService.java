@@ -75,6 +75,17 @@ public class StockService {
                 warehouseRepo.search(productId, lowStock, pageable).map(WarehouseStockResponse::from));
     }
 
+    /**
+     * On-hand warehouse quantity of a product, or 0 if no row exists yet. Used by
+     * {@code InventoryFacade.getWarehouseQuantity} — vanops needs a numeric read to
+     * auto-adjust demand-order lines on submit.
+     */
+    public int warehouseQuantityOrZero(Long productId) {
+        return warehouseRepo.findByProductId(productId)
+                .map(WarehouseStockItem::getQuantity)
+                .orElse(0);
+    }
+
     // ── Warehouse: writes (ADMIN / WAREHOUSE_MANAGER) ─────────────────────────
 
     /**

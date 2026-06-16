@@ -78,6 +78,22 @@ public class InventoryFacade {
         return findOrThrow(productId).getPrice();
     }
 
+    /**
+     * Current on-hand warehouse quantity of a product, or {@code 0} if no warehouse row
+     * exists yet (a product the warehouse has never received). Used by {@code vanops} on
+     * demand-order submit to auto-adjust line quantities down to availability without
+     * needing to reach into inventory's tables.
+     *
+     * @return on-hand quantity (≥ 0); {@code 0} if no warehouse stock row yet
+     * @throws BusinessException 404 if the product itself does not exist
+     */
+    @Transactional(readOnly = true)
+    public int getWarehouseQuantity(Long productId) {
+        // Guard: product existence — a missing product is a 404, not silently zero.
+        findOrThrow(productId);
+        return stockService.warehouseQuantityOrZero(productId);
+    }
+
     // ── Stock movements (delegated to StockService) ───────────────────────────
 
     /**

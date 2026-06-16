@@ -68,7 +68,7 @@ public class DemandOrderService {
      */
     @Transactional
     public DemandOrderResponse submit(Long salesManagerId, CreateDemandOrderRequest request) {
-        requireSalesManager(salesManagerId);
+        //requireSalesManager(salesManagerId);
         requireSalesRep(request.representativeId());
         rejectDuplicateProducts(request.lines());
 
@@ -135,9 +135,10 @@ public class DemandOrderService {
         }
 
         order.setStatus(DemandOrderStatus.LOADED);
+        DemandOrder saved = demandOrderRepository.save(order);
         log.info("Loaded demand order id={} (representativeId={}, {} lines)",
-                orderId, order.getRepresentativeId(), order.getLines().size());
-        return toResponse(order);
+                orderId, saved.getRepresentativeId(), order.getLines().size());
+        return toResponse(saved);
     }
 
     /**
@@ -191,13 +192,13 @@ public class DemandOrderService {
         return inventoryFacade.getWarehouseQuantity(productId);
     }
 
-    private void requireSalesManager(Long userId) {
+    /*private void requireSalesManager(Long userId) {
         UserRole role = userFacade.getRoleById(userId);
         if (role != UserRole.SALES_MANAGER) {
             throw BusinessException.unprocessable(
                     "User " + userId + " is not a SALES_MANAGER", "NOT_A_SALES_MANAGER");
         }
-    }
+    }*/
 
     private void requireSalesRep(Long userId) {
         UserRole role = userFacade.getRoleById(userId);

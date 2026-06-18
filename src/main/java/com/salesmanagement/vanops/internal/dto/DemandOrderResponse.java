@@ -21,7 +21,9 @@ import java.util.Map;
 public record DemandOrderResponse(
         Long                   id,
         Long                   salesManagerId,
+        String                 salesManagerName,
         Long                   representativeId,
+        String                 representativeName,
         LocalDate              orderDate,
         DemandOrderStatus      status,
         List<Line>             lines,
@@ -50,10 +52,15 @@ public record DemandOrderResponse(
     /**
      * Maps a {@link DemandOrder} entity to its response projection.
      *
-     * @param order        the order to map; must not be {@code null}
-     * @param productInfos product-id → {@link ProductInfo} for every line's product
+     * @param order              the order to map; must not be {@code null}
+     * @param productInfos       product-id → {@link ProductInfo} for every line's product
+     * @param salesManagerName   resolved name of the submitter (may be {@code null} if unknown)
+     * @param representativeName resolved name of the target rep (may be {@code null} if unknown)
      */
-    public static DemandOrderResponse from(DemandOrder order, Map<Long, ProductInfo> productInfos) {
+    public static DemandOrderResponse from(DemandOrder order,
+                                           Map<Long, ProductInfo> productInfos,
+                                           String salesManagerName,
+                                           String representativeName) {
         List<Line> lines = order.getLines().stream()
                 .map(l -> toLine(l, productInfos))
                 .toList();
@@ -61,7 +68,9 @@ public record DemandOrderResponse(
         return new DemandOrderResponse(
                 order.getId(),
                 order.getSalesManagerId(),
+                salesManagerName,
                 order.getRepresentativeId(),
+                representativeName,
                 order.getOrderDate(),
                 order.getStatus(),
                 lines,

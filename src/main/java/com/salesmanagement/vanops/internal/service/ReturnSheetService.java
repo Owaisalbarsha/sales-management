@@ -3,6 +3,7 @@ package com.salesmanagement.vanops.internal.service;
 import com.salesmanagement.identity.api.UserFacade;
 import com.salesmanagement.inventory.api.InventoryFacade;
 import com.salesmanagement.inventory.api.ProductInfo;
+import com.salesmanagement.inventory.api.VanInventoryItemInfo;
 import com.salesmanagement.shared.api.PageResponse;
 import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.shared.security.UserRole;
@@ -95,9 +96,49 @@ public class ReturnSheetService {
         }
 
         sheet.setStatus(ReturnSheetStatus.COMPLETED);
+        ReturnSheet saved = returnSheetRepository.save(sheet);
         log.info("Completed return sheet id={} (representativeId={}, {} lines)",
-                sheetId, sheet.getRepresentativeId(), sheet.getLines().size());
-        return toResponse(sheet);
+                sheetId, saved.getRepresentativeId(), saved.getLines().size());
+        return toResponse(saved);
+    }
+
+    /**
+     * Auto-generate a DRAFT return sheet from current van state.
+     *
+     * <p>End-of-day convenience: instead of typing every line, the system reads whatever is
+     * currently loaded on the rep's van via {@code InventoryFacade} and creates a
+     * {@link ReturnSheet} with one line per loaded product. <strong>No stock moves yet</strong>
+     * — the sheet is saved as {@code DRAFT}. A warehouse manager then reviews it, edits any
+     * lines that don't match physical reality, and calls {@code POST /{id}/complete} to
+     * actually move stock back and finalise the day.</p>
+     *
+     * <p>This split exists so the end-of-day reconciliation has a human verification step.
+     * If the database thinks the van holds 30 Pepsi but the actual count is 25 (shrinkage,
+     * a missed invoice, a miscount), the warehouse manager catches it during review — the
+     * whole point of reconciliation is to surface discrepancies, not paper over them.</p>
+     *
+     * <p>If the van is empty (everything was sold during the day), an empty DRAFT sheet is
+     * still created. That's deliberate: the document is the audit record that this rep ended
+     * their day, and a missing record would be indistinguishable from "the day was never closed".</p>
+     *
+     * @throws BusinessException 404 if the rep does not exist;
+     *                           422 if the user is not a SALES_REP
+     */
+    @Transactional
+    public ReturnSheetResponse autoCreate(Long representativeId) {
+        requireSalesRep(representativeId);
+
+        ReturnSheet sheet = new ReturnSheet(representativeId, LocalDate.now());
+        List<VanInventoryItemInfo> vanItems = inventoryFacade.getVanInventoryInfo(representativeId);
+
+        for (VanInventoryItemInfo item : vanItems) {
+            sheet.addLine(new ReturnSheetLine(item.productId(), item.quantity()));
+        }
+
+        ReturnSheet saved = returnSheetRepository.save(sheet);
+        log.info("Auto-created DRAFT return sheet id={} representativeId={} lines={}",
+                saved.getId(), representativeId, saved.getLines().size());
+        return toResponse(saved);
     }
 
     public ReturnSheetResponse getById(Long id) {
@@ -115,7 +156,14 @@ public class ReturnSheetService {
                         .flatMap(s -> s.getLines().stream().map(ReturnSheetLine::getProductId))
                         .collect(java.util.stream.Collectors.toSet()));
 
-        return PageResponse.of(page.map(s -> ReturnSheetResponse.from(s, productInfos)));
+        // Resolve every rep id once across the page (one fetch per distinct rep, not per sheet).
+        Set<Long> repIds = new HashSet<>();
+        for (ReturnSheet s : page.getContent()) repIds.add(s.getRepresentativeId());
+        Map<Long, String> repNames = new HashMap<>();
+        for (Long id : repIds) repNames.put(id, safeUserName(id));
+
+        return PageResponse.of(page.map(s -> ReturnSheetResponse.from(
+                s, productInfos, repNames.get(s.getRepresentativeId()))));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -129,7 +177,9 @@ public class ReturnSheetService {
     private ReturnSheetResponse toResponse(ReturnSheet sheet) {
         Set<Long> productIds = new HashSet<>();
         for (ReturnSheetLine l : sheet.getLines()) productIds.add(l.getProductId());
-        return ReturnSheetResponse.from(sheet, fetchProductInfos(productIds));
+        return ReturnSheetResponse.from(sheet,
+                fetchProductInfos(productIds),
+                safeUserName(sheet.getRepresentativeId()));
     }
 
     private Map<Long, ProductInfo> fetchProductInfos(Set<Long> productIds) {
@@ -138,6 +188,15 @@ public class ReturnSheetService {
             out.put(id, inventoryFacade.getProductInfo(id));
         }
         return out;
+    }
+
+    /** Returns the user's name, or {@code null} if the lookup fails (deleted user, etc.). */
+    private String safeUserName(Long userId) {
+        try {
+            return userFacade.getNameById(userId);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private void requireSalesRep(Long userId) {

@@ -17,6 +17,7 @@ import java.util.Map;
 public record ReturnSheetResponse(
         Long                   id,
         Long                   representativeId,
+        String                 representativeName,
         LocalDate              returnDate,
         ReturnSheetStatus      status,
         List<Line>             lines,
@@ -30,7 +31,9 @@ public record ReturnSheetResponse(
             int    quantity
     ) {}
 
-    public static ReturnSheetResponse from(ReturnSheet sheet, Map<Long, ProductInfo> productInfos) {
+    public static ReturnSheetResponse from(ReturnSheet sheet,
+                                           Map<Long, ProductInfo> productInfos,
+                                           String representativeName) {
         List<Line> lines = sheet.getLines().stream()
                 .map(l -> toLine(l, productInfos))
                 .toList();
@@ -38,6 +41,7 @@ public record ReturnSheetResponse(
         return new ReturnSheetResponse(
                 sheet.getId(),
                 sheet.getRepresentativeId(),
+                representativeName,
                 sheet.getReturnDate(),
                 sheet.getStatus(),
                 lines,

@@ -68,7 +68,7 @@ public class DemandOrderService {
      */
     @Transactional
     public DemandOrderResponse submit(Long salesManagerId, CreateDemandOrderRequest request) {
-        //requireSalesManager(salesManagerId);
+        requireSalesManager(salesManagerId);
         requireSalesRep(request.representativeId());
         rejectDuplicateProducts(request.lines());
 
@@ -137,7 +137,7 @@ public class DemandOrderService {
         order.setStatus(DemandOrderStatus.LOADED);
         DemandOrder saved = demandOrderRepository.save(order);
         log.info("Loaded demand order id={} (representativeId={}, {} lines)",
-                orderId, saved.getRepresentativeId(), order.getLines().size());
+                orderId, saved.getRepresentativeId(), saved.getLines().size());
         return toResponse(saved);
     }
 
@@ -160,7 +160,20 @@ public class DemandOrderService {
                         .flatMap(o -> o.getLines().stream().map(DemandOrderLine::getProductId))
                         .collect(java.util.stream.Collectors.toSet()));
 
-        return PageResponse.of(page.map(o -> DemandOrderResponse.from(o, productInfos)));
+        // Resolve every user id (sales managers + reps) once across the page — avoids
+        // re-fetching the same name multiple times when many orders share the same submitter.
+        Set<Long> userIds = new HashSet<>();
+        for (DemandOrder o : page.getContent()) {
+            userIds.add(o.getSalesManagerId());
+            userIds.add(o.getRepresentativeId());
+        }
+        Map<Long, String> userNames = fetchUserNames(userIds);
+
+        return PageResponse.of(page.map(o -> DemandOrderResponse.from(
+                o,
+                productInfos,
+                userNames.get(o.getSalesManagerId()),
+                userNames.get(o.getRepresentativeId()))));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -174,7 +187,12 @@ public class DemandOrderService {
     private DemandOrderResponse toResponse(DemandOrder order) {
         Set<Long> productIds = new HashSet<>();
         for (DemandOrderLine l : order.getLines()) productIds.add(l.getProductId());
-        return DemandOrderResponse.from(order, fetchProductInfos(productIds));
+        String salesManagerName   = safeUserName(order.getSalesManagerId());
+        String representativeName = safeUserName(order.getRepresentativeId());
+        return DemandOrderResponse.from(order,
+                fetchProductInfos(productIds),
+                salesManagerName,
+                representativeName);
     }
 
     /** Resolves product ids to {@link ProductInfo} via the inventory facade. */
@@ -188,17 +206,35 @@ public class DemandOrderService {
         return out;
     }
 
+    /** Resolves user ids to display names via the identity facade. Failures yield null. */
+    private Map<Long, String> fetchUserNames(Set<Long> userIds) {
+        Map<Long, String> out = new HashMap<>();
+        for (Long id : userIds) {
+            out.put(id, safeUserName(id));
+        }
+        return out;
+    }
+
+    /** Returns the user's name, or {@code null} if the lookup fails (deleted user, etc.). */
+    private String safeUserName(Long userId) {
+        try {
+            return userFacade.getNameById(userId);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     private int warehouseAvailable(Long productId) {
         return inventoryFacade.getWarehouseQuantity(productId);
     }
 
-    /*private void requireSalesManager(Long userId) {
+    private void requireSalesManager(Long userId) {
         UserRole role = userFacade.getRoleById(userId);
-        if (role != UserRole.SALES_MANAGER) {
+        if (role != UserRole.SALES_MANAGER && role != UserRole.ADMIN) {
             throw BusinessException.unprocessable(
                     "User " + userId + " is not a SALES_MANAGER", "NOT_A_SALES_MANAGER");
         }
-    }*/
+    }
 
     private void requireSalesRep(Long userId) {
         UserRole role = userFacade.getRoleById(userId);

@@ -53,6 +53,19 @@ public class ReturnSheetController {
         return ApiResponse.ok(returnSheetService.complete(id), "Return sheet completed");
     }
 
+    /**
+     * Auto-generate a DRAFT return sheet from the rep's current van state.
+     * End-of-day shortcut: no typing required, system reads the van and pre-fills the lines.
+     * Warehouse manager then reviews and calls {@code /{id}/complete} to finalise.
+     * ADMIN or WAREHOUSE_MANAGER.
+     */
+    @PostMapping("/auto-create")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER')")
+    public ApiResponse<ReturnSheetResponse> autoCreate(@RequestParam Long representativeId) {
+        return ApiResponse.created(returnSheetService.autoCreate(representativeId));
+    }
+
     /** Read one return sheet. ADMIN, WAREHOUSE_MANAGER, or SALES_MANAGER. */
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER', 'SALES_MANAGER')")

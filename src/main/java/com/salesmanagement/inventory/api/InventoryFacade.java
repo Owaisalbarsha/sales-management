@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Public API surface of the inventory module — the only type other modules may import
@@ -92,6 +93,19 @@ public class InventoryFacade {
         // Guard: product existence — a missing product is a 404, not silently zero.
         findOrThrow(productId);
         return stockService.warehouseQuantityOrZero(productId);
+    }
+
+    /**
+     * Snapshot of everything currently loaded on a representative's van — used by
+     * {@code vanops} to auto-generate end-of-day return sheets without typing line items.
+     * Empty rows are not surfaced (the entity invariant: van rows are deleted when they hit
+     * zero, so any returned line has {@code quantity > 0}).
+     *
+     * @return list of (productId, quantity); empty if the van is empty / not yet loaded
+     */
+    @Transactional(readOnly = true)
+    public List<VanInventoryItemInfo> getVanInventoryInfo(Long representativeId) {
+        return stockService.getVanInventoryAsInfo(representativeId);
     }
 
     // ── Stock movements (delegated to StockService) ───────────────────────────

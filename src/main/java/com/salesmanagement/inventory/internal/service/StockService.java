@@ -1,6 +1,7 @@
 package com.salesmanagement.inventory.internal.service;
 
 import com.salesmanagement.identity.api.UserFacade;
+import com.salesmanagement.inventory.api.VanInventoryItemInfo;
 import com.salesmanagement.inventory.internal.entity.VanInventoryItem;
 import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 import com.salesmanagement.inventory.internal.dto.VanInventoryResponse;
@@ -136,8 +137,21 @@ public class StockService {
      * The products currently loaded on a representative's van (empty if none).
      */
     public List<VanInventoryResponse> getVanInventory(Long representativeId) {
+        // Resolve the rep's name once — every row shares the same rep, so we don't refetch per line.
+        String representativeName = safeUserName(representativeId);
         return vanRepo.findByRepresentative(representativeId).stream()
-                .map(VanInventoryResponse::from)
+                .map(v -> VanInventoryResponse.from(v, representativeName))
+                .toList();
+    }
+
+    /**
+     * Van inventory as cross-module {@link VanInventoryItemInfo} projections — used by
+     * {@code InventoryFacade.getVanInventoryInfo}. Distinct from {@link #getVanInventory}
+     * which returns the internal response DTO for the REST controller.
+     */
+    public List<VanInventoryItemInfo> getVanInventoryAsInfo(Long representativeId) {
+        return vanRepo.findByRepresentative(representativeId).stream()
+                .map(v -> new VanInventoryItemInfo(v.getProduct().getId(), v.getQuantity()))
                 .toList();
     }
 
@@ -293,6 +307,15 @@ public class StockService {
     private void requireProductExists(Long productId) {
         if (!productRepository.existsById(productId)) {
             throw BusinessException.notFound("Product not found: " + productId, "PRODUCT_NOT_FOUND");
+        }
+    }
+
+    /** Returns the user's name, or {@code null} if the lookup fails (deleted user, etc.). */
+    private String safeUserName(Long userId) {
+        try {
+            return userFacade.getNameById(userId);
+        } catch (Exception ex) {
+            return null;
         }
     }
 

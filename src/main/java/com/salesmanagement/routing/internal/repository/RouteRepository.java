@@ -27,11 +27,11 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
      * Stops are loaded lazily when each row is mapped to a response (inside the same tx).
      */
     @Query("""
-            select r from Route r
-            where (:representativeId is null or r.representativeId = :representativeId)
-              and (:status          is null or r.status           = :status)
-              and (:routeDate       is null or r.routeDate         = :routeDate)
-            """)
+    select r from Route r
+    where (cast(:representativeId as long)      is null or r.representativeId = :representativeId)
+      and (cast(:status           as string)    is null or r.status           = :status)
+      and (cast(:routeDate        as localdate) is null or r.routeDate        = :routeDate)
+    """)
     Page<Route> search(@Param("representativeId") Long representativeId,
                        @Param("status") RouteStatus status,
                        @Param("routeDate") LocalDate routeDate,

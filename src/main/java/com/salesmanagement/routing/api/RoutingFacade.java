@@ -2,6 +2,7 @@ package com.salesmanagement.routing.api;
 
 import com.salesmanagement.routing.internal.entity.Route;
 import com.salesmanagement.routing.internal.entity.RouteCustomerAssignment;
+import com.salesmanagement.routing.internal.enums.RouteStatus;
 import com.salesmanagement.routing.internal.repository.RouteRepository;
 import com.salesmanagement.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -15,13 +16,7 @@ import java.util.Optional;
 
 /**
  * Public API surface of the {@code routing} module — the only type other modules may import
- * from routing. Mirrors {@code CustomerFacade} / {@code TerritoryFacade}: read-only, and it
- * reaches into its own {@code internal} package (allowed within a module) but never leaks the
- * {@link Route} entity or the {@code RouteStatus} enum outward — callers receive a
- * {@link RouteInfo} or a primitive.</p>
- *
- * <p>Built ahead of its consumers: {@code visit} (next in the build order) needs to validate a
- * route id and that a customer is a stop on it; {@code sync} needs today's route to push down.</p>
+ * from routing. Read-only: no writes go through this facade.
  */
 @Service
 @RequiredArgsConstructor
@@ -32,11 +27,7 @@ public class RoutingFacade {
 
     /**
      * The rep's route for today, if any. Absence is normal (a rep may have no route today),
-     * so this returns {@link Optional} rather than throwing — sync should treat empty as
-     * "nothing to push", not an error.
-     *
-     * @param representativeId the sales rep
-     * @return today's route info, or empty
+     * so this returns {@link Optional} rather than throwing.
      */
     public Optional<RouteInfo> getRouteForToday(Long representativeId) {
         return routeRepository
@@ -47,8 +38,6 @@ public class RoutingFacade {
     /**
      * The route with the given id.
      *
-     * @param routeId the route id
-     * @return the route info
      * @throws BusinessException 404 if no route has this id
      */
     public RouteInfo getRouteInfo(Long routeId) {
@@ -59,19 +48,31 @@ public class RoutingFacade {
     }
 
     /**
-     * Whether a customer is a stop on a route. Used by {@code visit} to reject a check-in for
-     * a customer who is not on the rep's route (SRS alternative flow "customer not on today's
-     * route"). Returns {@code false} for an unknown route rather than throwing.
-     *
-     * @param routeId    the route id
-     * @param customerId the customer id
-     * @return {@code true} if the customer is a stop on the route
+     * Whether a customer is a stop on a route. Returns {@code false} for an unknown route
+     * rather than throwing.
      */
     public boolean isCustomerOnRoute(Long routeId, Long customerId) {
         return routeRepository.findWithAssignmentsById(routeId)
                 .map(r -> r.getAssignments().stream()
                         .anyMatch(a -> a.getCustomerId().equals(customerId)))
                 .orElse(false);
+    }
+
+    /**
+     * Routes whose date is strictly before {@code date} and whose status is still
+     * {@code PLANNED} or {@code ACTIVE}. Used by the visit module's nightly sweep to close
+     * routes the reps forgot to end, including routes that received zero check-ins (which
+     * have no visit rows, so only routing can surface them).
+     *
+     * @param date exclusive upper bound — typically {@code LocalDate.now()}
+     */
+    public List<RouteInfo> findActiveOrPlannedBefore(LocalDate date) {
+        return routeRepository
+                .findWithAssignmentsByRouteDateBeforeAndStatusIn(
+                        date, List.of(RouteStatus.PLANNED, RouteStatus.ACTIVE))
+                .stream()
+                .map(RoutingFacade::toInfo)
+                .toList();
     }
 
     private static RouteInfo toInfo(Route route) {

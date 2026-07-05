@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -54,4 +56,19 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
 
     /** One-route-per-rep-per-day guard. */
     boolean existsByRepresentativeIdAndRouteDate(Long representativeId, LocalDate routeDate);
+
+    /**
+     * Routes with a date strictly before {@code date} whose status is still in the given set.
+     * Used by the nightly sweep to find routes left unfinished (PLANNED or ACTIVE) on past dates.
+     * Stops are eagerly fetched so the sweep can iterate them without a second query per route.
+     */
+    @Query("""
+            select distinct r from Route r
+            left join fetch r.assignments
+            where r.routeDate < :date
+              and r.status in :statuses
+            """)
+    List<Route> findWithAssignmentsByRouteDateBeforeAndStatusIn(
+            @Param("date") LocalDate date,
+            @Param("statuses") Collection<RouteStatus> statuses);
 }

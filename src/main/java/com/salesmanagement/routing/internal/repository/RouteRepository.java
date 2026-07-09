@@ -71,4 +71,25 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     List<Route> findWithAssignmentsByRouteDateBeforeAndStatusIn(
             @Param("date") LocalDate date,
             @Param("statuses") Collection<RouteStatus> statuses);
+
+    boolean existsByRepresentativeIdAndRouteDateAndStatusIn(
+            Long representativeId, LocalDate routeDate, java.util.List<RouteStatus> statuses);
+
+
+    @Query("""
+        select r from Route r
+        left join fetch r.assignments
+        where r.representativeId = :representativeId
+          and r.routeDate = :routeDate
+        order by
+          case r.status
+            when com.salesmanagement.routing.internal.enums.RouteStatus.ACTIVE    then 1
+            when com.salesmanagement.routing.internal.enums.RouteStatus.PLANNED   then 2
+            when com.salesmanagement.routing.internal.enums.RouteStatus.COMPLETED then 3
+          end,
+          r.id desc
+        """)
+    java.util.List<Route> findAllWithAssignmentsByRepresentativeIdAndRouteDate(
+            @org.springframework.data.repository.query.Param("representativeId") Long representativeId,
+            @org.springframework.data.repository.query.Param("routeDate")        LocalDate routeDate);
 }

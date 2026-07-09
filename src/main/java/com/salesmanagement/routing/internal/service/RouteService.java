@@ -76,9 +76,16 @@ public class RouteService {
         requireTerritory(request.territoryId());
 
         LocalDate date = request.routeDate() != null ? request.routeDate() : LocalDate.now();
-        if (routeRepository.existsByRepresentativeIdAndRouteDate(request.representativeId(), date)) {
+        boolean hasOpenRoute = routeRepository
+                .existsByRepresentativeIdAndRouteDateAndStatusIn(
+                        request.representativeId(),
+                        date,
+                        java.util.List.of(RouteStatus.PLANNED, RouteStatus.ACTIVE));
+
+        if (hasOpenRoute) {
             throw BusinessException.conflict(
-                    "Representative " + request.representativeId() + " already has a route on " + date,
+                    "Representative " + request.representativeId()
+                            + " already has a PLANNED or ACTIVE route on " + date,
                     "ROUTE_ALREADY_EXISTS_FOR_DAY");
         }
 
@@ -337,10 +344,20 @@ public class RouteService {
 
     /** A rep's own route for a given day. @throws BusinessException 404 if none that day */
     public RouteResponse getRouteForRepOnDate(Long representativeId, LocalDate date) {
-        Route route = routeRepository
-                .findWithAssignmentsByRepresentativeIdAndRouteDate(representativeId, date)
-                .orElseThrow(() -> BusinessException.notFound(
-                        "No route for representative " + representativeId + " on " + date, "ROUTE_NOT_FOUND"));
+        var routes = routeRepository
+                .findAllWithAssignmentsByRepresentativeIdAndRouteDate(representativeId, date);
+        if (routes.isEmpty()) {
+            throw BusinessException.notFound(
+                    "No route for representative " + representativeId + " on " + date,
+                    "ROUTE_NOT_FOUND");
+        }
+        Route route = routes.get(0);  // ACTIVE if any, else PLANNED, else most recent COMPLETED
+
+        if (route.getStatus() == RouteStatus.PLANNED) {
+            route.setStatus(RouteStatus.ACTIVE);
+            routeRepository.save(route);
+            log.info("Route id={} auto-activated on first rep fetch", route.getId());
+        }
         return toResponse(route);
     }
 

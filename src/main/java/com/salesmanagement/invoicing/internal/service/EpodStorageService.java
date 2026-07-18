@@ -30,7 +30,7 @@ import java.util.UUID;
  * this class for S3/blob storage later touches only this file — the service and entities are
  * unaware of where bytes live.</p>
  *
- * <p><strong>Hashing.</strong> {@link #hash(byte[], Long, Long, BigDecimal)} computes
+ * <p><strong>Hashing.</strong> {@link # hash(byte[], Long, Long, BigDecimal)} computes
  * {@code SHA-256(invoiceId | customerId | total | fileBytes)} and returns lowercase hex. Because
  * the invoice's identity data is folded in, the same image on a different invoice produces a
  * different hash — so a signature cannot be lifted onto another invoice undetected, and re-hashing

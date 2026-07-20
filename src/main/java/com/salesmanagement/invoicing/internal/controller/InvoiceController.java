@@ -32,7 +32,11 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-
+import com.salesmanagement.invoicing.internal.dto.EpodFile;
+import com.salesmanagement.invoicing.internal.enums.EpodArtifactType;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import java.time.LocalDate;
 
 /**
@@ -177,6 +181,27 @@ public class InvoiceController {
             @PathVariable Long id) {
         boolean oversight = hasOversight(principal);
         return ApiResponse.ok(invoiceService.getById(id, principal.getUserId(), oversight));
+    }
+
+    /**
+     * Downloads one ePOD artifact (signature or delivery photo). Scoped like {@code getById}: a
+     * rep may only open their own invoice's proof, managers and admin may open any.
+     *
+     * <p>Returns the raw image, so it can be used directly as an {@code <img>} source or rendered
+     * in the mobile app. The storage folder is not served statically — every read goes through
+     * this endpoint so the scope check applies.</p>
+     */
+    @GetMapping("/{id}/epod/{type}")
+    @PreAuthorize("hasAnyRole('SALES_REP', 'SALES_MANAGER', 'ADMIN')")
+    public ResponseEntity<Resource> getEpodFile(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id,
+            @PathVariable EpodArtifactType type) {
+        EpodFile file = invoiceService.getEpodFile(id, type, principal.getUserId(), hasOversight(principal));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.filename() + "\"")
+                .body(file.resource());
     }
 
     /** True when the caller holds a role that may read any invoice (manager or admin). */

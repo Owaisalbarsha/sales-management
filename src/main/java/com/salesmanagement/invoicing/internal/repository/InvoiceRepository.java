@@ -48,21 +48,27 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     Page<Invoice> findByRepresentativeId(Long representativeId, Pageable pageable);
 
     /**
-     * Single invoice with its line items <em>and</em> ePOD artifacts eagerly fetched.
+     * Single invoice with its line items eagerly fetched.
      *
-     * <p>Two separate collections are fetch-joined in one query. This produces a Cartesian
-     * product across lines × artifacts, so {@code distinct} is required to collapse duplicate
-     * {@code Invoice} roots. For invoice-sized data (a handful of lines, at most two artifacts)
-     * the product is tiny and this stays a single round trip. If artifact types ever grow large,
-     * split into two queries.</p>
+     * <p>Only ONE collection is fetch-joined here. Hibernate cannot fetch two bags (List
+     * collections) in one query — it throws MultipleBagFetchException rather than return an
+     * ambiguous Cartesian product. The ePOD artifacts are loaded by a second query into the
+     * same persistence context, which Hibernate merges into this same entity instance.</p>
      */
     @Query("""
-            select distinct i from Invoice i
+            select i from Invoice i
             left join fetch i.lines
+            where i.id = :id
+            """)
+    Optional<Invoice> findWithLinesById(@Param("id") Long id);
+
+    /** Second pass: loads the ePOD artifacts onto the invoice already in the persistence context. */
+    @Query("""
+            select i from Invoice i
             left join fetch i.epodArtifacts
             where i.id = :id
             """)
-    Optional<Invoice> findWithChildrenById(@Param("id") Long id);
+    Optional<Invoice> findWithEpodById(@Param("id") Long id);
 
     /**
      * Idempotency lookup for offline submits (D22): whether an invoice already exists for a

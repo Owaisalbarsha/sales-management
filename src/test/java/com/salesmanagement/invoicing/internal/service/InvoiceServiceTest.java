@@ -133,7 +133,8 @@ class InvoiceServiceTest {
     }
 
     private void givenInvoiceExists(Invoice invoice) {
-        when(invoiceRepository.findWithChildrenById(INVOICE_ID)).thenReturn(Optional.of(invoice));
+        when(invoiceRepository.findWithLinesById(INVOICE_ID)).thenReturn(Optional.of(invoice));
+        when(invoiceRepository.findWithEpodById(INVOICE_ID)).thenReturn(Optional.of(invoice));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -686,7 +687,7 @@ class InvoiceServiceTest {
         @Test
         @DisplayName("an unknown invoice is a 404")
         void unknownInvoiceIsNotFound() {
-            when(invoiceRepository.findWithChildrenById(INVOICE_ID)).thenReturn(Optional.empty());
+            when(invoiceRepository.findWithLinesById(INVOICE_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.getById(INVOICE_ID, REP_ID, true))
                     .isInstanceOf(BusinessException.class)

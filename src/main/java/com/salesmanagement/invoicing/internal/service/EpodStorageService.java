@@ -17,6 +17,9 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 
 /**
  * Disk-backed storage for ePOD artifact files, and the tamper-detection hashing that binds a
@@ -176,5 +179,34 @@ public class EpodStorageService {
     private static String extensionOf(String fileToken) {
         int dot = fileToken.lastIndexOf('.');
         return dot >= 0 ? fileToken.substring(dot) : "";
+    }
+
+    /**
+     * Loads a stored artifact file for download. The stored {@code url} is a server-side path, so
+     * this is the only way a client can reach the bytes — the storage folder is deliberately not
+     * exposed as a static resource, since ePOD files are evidence and must go through the read
+     * scope check.
+     *
+     * @param storedUrl the artifact's {@code url} column value
+     * @throws BusinessException 404 if the file is missing from disk
+     */
+    public Resource load(String storedUrl) {
+        Path path = Path.of(storedUrl);
+        if (!Files.isRegularFile(path)) {
+            log.error("ePOD file missing from disk: {}", storedUrl);
+            throw BusinessException.notFound(
+                    "Proof-of-delivery file is missing", "EPOD_FILE_MISSING");
+        }
+        return new FileSystemResource(path);
+    }
+
+    /** Best-effort MIME type from the stored file; falls back to generic binary. */
+    public String contentTypeOf(String storedUrl) {
+        try {
+            String probed = Files.probeContentType(Path.of(storedUrl));
+            return probed != null ? probed : MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        } catch (IOException e) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
     }
 }

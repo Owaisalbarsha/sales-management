@@ -30,6 +30,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.math.RoundingMode;
+import java.util.Optional;
+import com.salesmanagement.invoicing.internal.dto.EpodFile;
+import com.salesmanagement.invoicing.internal.entity.EpodArtifact;
+import java.nio.file.Path;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -148,14 +153,54 @@ public class InvoiceService {
         requireDraft(invoice);
         rejectDuplicateProducts(request.lines().stream().map(UpdateInvoiceRequest.Line::productId).toList());
 
-        invoice.clearLines();
+        // Clear-and-rebuild would make Hibernate insert the new rows BEFORE deleting the old ones
+        // (it orders INSERTs ahead of DELETEs on flush), colliding with
+        // UNIQUE(invoice_id, product_id) whenever a product stays on the invoice. So: mutate the
+        // surviving lines in place, add only the genuinely new ones, remove only the dropped ones.
+        Set<Long> requestedProductIds = request.lines().stream()
+                .map(UpdateInvoiceRequest.Line::productId)
+                .collect(Collectors.toSet());
+
+        // Drop lines whose product is no longer on the invoice.
+        List<Long> removedProductIds = invoice.getLines().stream()
+                .map(InvoiceLineItem::getProductId)
+                .filter(pid -> !requestedProductIds.contains(pid))
+                .toList();
+        removedProductIds.forEach(invoice::removeLineByProduct);
+
+        // Update survivors in place, re-capturing the current price (D5a); add new products.
         for (UpdateInvoiceRequest.Line reqLine : request.lines()) {
-            invoice.addLine(buildLine(reqLine.productId(), reqLine.quantity(), reqLine.discount()));
+            Optional<InvoiceLineItem> existing = invoice.findLine(reqLine.productId());
+            if (existing.isPresent()) {
+                applyLineUpdate(existing.get(), reqLine.quantity(), reqLine.discount());
+            } else {
+                invoice.addLine(buildLine(reqLine.productId(), reqLine.quantity(), reqLine.discount()));
+            }
         }
+        invoice.recomputeTotal();
 
         Invoice saved = invoiceRepository.save(invoice);
         log.info("Updated DRAFT invoice id={} lines={}", invoiceId, saved.getLines().size());
         return toResponse(saved);
+    }
+
+    /** Re-captures the current price onto an existing line and applies the new quantity/discount. */
+    private void applyLineUpdate(InvoiceLineItem line, int quantity, BigDecimal discount) {
+        requireProductExists(line.getProductId());
+        BigDecimal price = inventoryFacade.getProductPrice(line.getProductId());  // re-captured (D5a)
+        BigDecimal disc  = discount == null ? BigDecimal.ZERO : discount;
+
+        BigDecimal gross = price.multiply(BigDecimal.valueOf(quantity));
+        if (disc.compareTo(gross) > 0) {
+            throw BusinessException.unprocessable(
+                    "Discount " + disc + " exceeds line total " + gross
+                            + " for product " + line.getProductId(),
+                    "INVOICE_DISCOUNT_EXCEEDS_LINE");
+        }
+        line.setQuantity(quantity);
+        line.setPrice(price.setScale(2, RoundingMode.HALF_UP));
+        line.setDiscount(disc.setScale(2, RoundingMode.HALF_UP));
+        line.recompute();
     }
 
     /**
@@ -345,6 +390,31 @@ public class InvoiceService {
         return toResponse(invoice);
     }
 
+    /**
+     * Resolves one ePOD artifact's file for download, applying the same read scope as
+     * {@link #getById}: a rep may only open their own invoice's proof; managers and admin may
+     * open any.
+     *
+     * @throws BusinessException 404 unknown invoice or no such artifact; 403 if a rep requests
+     *                           another rep's proof
+     */
+    public EpodFile getEpodFile(Long invoiceId, EpodArtifactType type, Long callerId, boolean oversight) {
+        Invoice invoice = reload(invoiceId);
+        if (!oversight) {
+            requireOwner(invoice, callerId);
+        }
+        EpodArtifact artifact = invoice.getEpodArtifacts().stream()
+                .filter(a -> a.getType() == type)
+                .findFirst()
+                .orElseThrow(() -> BusinessException.notFound(
+                        "No " + type + " artifact on invoice " + invoiceId, "EPOD_ARTIFACT_NOT_FOUND"));
+
+        return new EpodFile(
+                epodStorage.load(artifact.getUrl()),
+                epodStorage.contentTypeOf(artifact.getUrl()),
+                Path.of(artifact.getUrl()).getFileName().toString());
+    }
+
     /** A rep's own invoice history (FR-81), newest first. */
     public PageResponse<InvoiceResponse> listOwn(Long representativeId, Pageable pageable) {
         Page<Invoice> page = invoiceRepository.findByRepresentativeId(representativeId, pageable);
@@ -463,9 +533,12 @@ public class InvoiceService {
     // ═══════════════════════════════════════════════════════════════════════
 
     private Invoice reload(Long id) {
-        return invoiceRepository.findWithChildrenById(id)
+        Invoice invoice = invoiceRepository.findWithLinesById(id)
                 .orElseThrow(() -> BusinessException.notFound(
                         "Invoice not found: " + id, "INVOICE_NOT_FOUND"));
+        // Second pass populates epodArtifacts on this same managed instance.
+        invoiceRepository.findWithEpodById(id);
+        return invoice;
     }
 
     /** Maps a single invoice, resolving product infos and user/customer names once. */

@@ -1,6 +1,8 @@
 package com.salesmanagement.tracking.internal.service;
 
 import com.salesmanagement.identity.api.UserFacade;
+import com.salesmanagement.systemconfig.api.ConfigFacade;
+import com.salesmanagement.systemconfig.api.ConfigKey;
 import com.salesmanagement.tracking.internal.TrackingPolicy;
 import com.salesmanagement.tracking.internal.dto.RepLatestLocationResponse;
 import com.salesmanagement.tracking.internal.event.GpsPointsIngested;
@@ -60,6 +62,7 @@ public class LiveLocationBroadcaster {
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
     private final UserFacade userFacade;
+    private final ConfigFacade configFacade;
 
     // ═══════════════════════════════════════════════════════════════════════
     //  Subscription
@@ -174,8 +177,11 @@ public class LiveLocationBroadcaster {
         }
     }
 
-    private static boolean isActive(Instant recordedAt) {
-        return recordedAt.isAfter(Instant.now().minus(TrackingPolicy.ACTIVE_WINDOW));
+    private boolean isActive(Instant recordedAt) {    // drop 'static'
+        int windowMinutes = configFacade.getInt(
+                ConfigKey.TRACKING_ACTIVE_WINDOW_MINUTES,
+                (int) TrackingPolicy.ACTIVE_WINDOW.toMinutes());
+        return recordedAt.isAfter(Instant.now().minus(Duration.ofMinutes(windowMinutes)));
     }
 
     /** Name enrichment must never break a broadcast; an unresolvable user yields {@code null}. */

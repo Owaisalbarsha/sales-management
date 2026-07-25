@@ -5,6 +5,8 @@ import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.tracking.api.GpsPointInfo;
 import com.salesmanagement.tracking.api.GpsPointInput;
 import com.salesmanagement.tracking.api.IngestResult;
+import com.salesmanagement.systemconfig.api.ConfigFacade;
+import com.salesmanagement.systemconfig.api.ConfigKey;
 import com.salesmanagement.tracking.internal.TrackingPolicy;
 import com.salesmanagement.tracking.internal.dto.GpsPointResponse;
 import com.salesmanagement.tracking.internal.dto.RecordGpsRequest;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -60,6 +63,7 @@ public class TrackingService {
     private final GpsLogRepository gpsLogRepository;
     private final UserFacade userFacade;
     private final ApplicationEventPublisher events;
+    private final ConfigFacade configFacade;
 
     // ═══════════════════════════════════════════════════════════════════════
     //  INGEST
@@ -200,7 +204,10 @@ public class TrackingService {
      * a batch lookup on {@code UserFacade}, not a cache here.</p>
      */
     public List<RepLatestLocationResponse> getLatestLocations() {
-        Instant freshnessFloor = Instant.now().minus(TrackingPolicy.ACTIVE_WINDOW);
+        int windowMinutes = configFacade.getInt(
+                ConfigKey.TRACKING_ACTIVE_WINDOW_MINUTES,
+                (int) TrackingPolicy.ACTIVE_WINDOW.toMinutes());   // 15 = fallback default
+        Instant freshnessFloor = Instant.now().minus(Duration.ofMinutes(windowMinutes));
 
         return gpsLogRepository.findLatestPerRepresentative().stream()
                 .map(row -> new RepLatestLocationResponse(

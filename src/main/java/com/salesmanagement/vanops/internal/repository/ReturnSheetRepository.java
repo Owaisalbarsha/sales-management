@@ -1,5 +1,6 @@
 package com.salesmanagement.vanops.internal.repository;
 
+import com.salesmanagement.vanops.api.ProductMovementAggregate;
 import com.salesmanagement.vanops.internal.entity.ReturnSheet;
 import com.salesmanagement.vanops.internal.enums.ReturnSheetStatus;
 import org.springframework.data.domain.Page;
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,4 +35,23 @@ public interface ReturnSheetRepository extends JpaRepository<ReturnSheet, Long> 
                              @Param("status") ReturnSheetStatus status,
                              @Param("returnDate") LocalDate returnDate,
                              Pageable pageable);
+
+    /**
+     * Per-product quantity returned IN from vans over a window — the inbound side of FR-122. Sums the
+     * line {@code quantity} across return sheets whose status is in {@code statuses}; the facade passes
+     * {@code {COMPLETED}} (the only state where stock physically moved van → warehouse). Half-open
+     * {@code [from, to)} on {@code return_date}.
+     */
+    @Query("""
+            select new com.salesmanagement.vanops.api.ProductMovementAggregate(
+                       l.productId, coalesce(sum(l.quantity), 0))
+            from ReturnSheet r
+            join r.lines l
+            where r.returnDate >= :from and r.returnDate < :to
+              and r.status in :statuses
+            group by l.productId
+            """)
+    List<ProductMovementAggregate> aggregateReturnedByProduct(@Param("from") LocalDate from,
+                                                              @Param("to") LocalDate to,
+                                                              @Param("statuses") Collection<ReturnSheetStatus> statuses);
 }

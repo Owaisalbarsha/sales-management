@@ -49,6 +49,3 @@ Thumbs.db
 # Logs
 *.log
 logs/
-
-epod-uploads/
-epod-storage/

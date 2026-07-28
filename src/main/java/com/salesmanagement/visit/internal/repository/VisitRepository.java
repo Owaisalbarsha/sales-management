@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -52,4 +53,12 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
                        @Param("customerId") Long customerId,
                        @Param("status") VisitStatus status,
                        Pageable pageable);
+
+    /**
+     * All visits on any of the given routes — the batch behind {@code VisitFacade.findVisitsByRouteIds},
+     * used by the reporting module's route performance reports. Derived query: Spring Data generates
+     * {@code where route_id in (?)}. Callers guard against an empty collection (the facade does),
+     * since an empty {@code IN ()} is not portable SQL.
+     */
+    List<Visit> findByRouteIdIn(Collection<Long> routeIds);
 }

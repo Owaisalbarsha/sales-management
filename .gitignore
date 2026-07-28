@@ -49,3 +49,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# ePOD runtime artifacts (user-captured, not source)
+/epod-storage/
+*.epod

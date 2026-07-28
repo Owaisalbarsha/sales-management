@@ -7,7 +7,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
+import com.salesmanagement.invoicing.api.CustomerPurchaseAggregate;
+import com.salesmanagement.invoicing.api.InvoiceSummary;
+import com.salesmanagement.invoicing.api.ProductSalesAggregate;
+import com.salesmanagement.invoicing.api.RepSalesAggregate;
+import java.util.Collection;
+import java.util.List;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -73,4 +78,78 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     /** Fetch an existing invoice by its idempotency key (to return the already-created row on retry). */
     Optional<Invoice> findByClientUuid(String clientUuid);
+
+
+    /**
+     * Per-rep sales rollup for FR-115 (see {@link RepSalesAggregate}). One row per rep whose
+     * invoices in the window fall within {@code statuses}. Half-open date range.
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.RepSalesAggregate(
+                       i.representativeId, count(i), coalesce(sum(i.totalAmount), 0))
+            from Invoice i
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+              and i.status in :statuses
+            group by i.representativeId
+            """)
+    List<RepSalesAggregate> aggregateByRep(@Param("from") LocalDate from,
+                                           @Param("to") LocalDate to,
+                                           @Param("statuses") Collection<InvoiceStatus> statuses);
+
+    /**
+     * Per-customer purchasing rollup for FR-118/119 (see {@link CustomerPurchaseAggregate}).
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.CustomerPurchaseAggregate(
+                       i.customerId, count(i), coalesce(sum(i.totalAmount), 0))
+            from Invoice i
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+              and i.status in :statuses
+            group by i.customerId
+            """)
+    List<CustomerPurchaseAggregate> aggregateByCustomer(@Param("from") LocalDate from,
+                                                        @Param("to") LocalDate to,
+                                                        @Param("statuses") Collection<InvoiceStatus> statuses);
+
+    /**
+     * Per-product sales rollup for FR-123 (see {@link ProductSalesAggregate}). Joins the invoice
+     * to its line items and groups by product, returning both units and revenue. The join lives on
+     * the aggregate root's {@code lines} association, so no bag-fetch problem arises (this is a
+     * scalar projection, not an entity fetch — MultipleBagFetchException cannot occur here).
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.ProductSalesAggregate(
+                       li.productId, coalesce(sum(li.quantity), 0), coalesce(sum(li.subtotal), 0))
+            from Invoice i
+            join i.lines li
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+              and i.status in :statuses
+            group by li.productId
+            """)
+    List<ProductSalesAggregate> aggregateProductSales(@Param("from") LocalDate from,
+                                                      @Param("to") LocalDate to,
+                                                      @Param("statuses") Collection<InvoiceStatus> statuses);
+
+    /**
+     * Flat per-invoice rows for the tabular reports FR-116/117 (see {@link InvoiceSummary}).
+     * Unbounded {@code List} by design (D2): reports are exported whole to Excel/PDF, so a paged
+     * return would truncate the export to page one. Optional filters follow the same
+     * {@code cast(:param as type)} null-guard the existing {@code search} uses, to avoid the
+     * Postgres type-inference error on typed params. Status is exposed as its enum name via
+     * {@code str(i.status)} so no internal enum leaks into the api DTO.
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.InvoiceSummary(
+                       i.id, i.customerId, i.representativeId, i.invoiceDate,
+                       i.totalAmount, str(i.status))
+            from Invoice i
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+              and (cast(:representativeId as long) is null or i.representativeId = :representativeId)
+              and (cast(:customerId       as long) is null or i.customerId       = :customerId)
+            order by i.invoiceDate desc, i.id desc
+            """)
+    List<InvoiceSummary> findSummaries(@Param("from") LocalDate from,
+                                       @Param("to") LocalDate to,
+                                       @Param("representativeId") Long representativeId,
+                                       @Param("customerId") Long customerId);
 }

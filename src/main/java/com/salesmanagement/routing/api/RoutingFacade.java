@@ -90,4 +90,30 @@ public class RoutingFacade {
                 route.isOptimized(),
                 stops);
     }
+
+    /**
+     * Every route whose business date falls in the half-open window {@code [from, to)}, optionally
+     * scoped to one rep — the planned side of the route performance reports (FR-125/126/127).
+     *
+     * <p>Reporting calls this first, then feeds the returned route ids to
+     * {@code VisitFacade.findVisitsByRouteIds} to get the actual visit outcomes. Assignments (the
+     * planned stops) are fetch-joined so the caller can count planned-vs-completed without a second
+     * trip. Half-open range and {@code LocalDate} match the invoicing aggregates and the
+     * {@code Route.routeDate} column (D9).</p>
+     *
+     * <p>No status filter: a route performance report wants PLANNED, ACTIVE and COMPLETED routes
+     * alike (a route still ACTIVE at report time is itself a finding). Callers that want only closed
+     * routes filter on {@link RouteInfo#status()}.</p>
+     *
+     * @param from  inclusive start of the business-date window
+     * @param to    exclusive end of the business-date window
+     * @param repId optional rep filter; {@code null} for all reps
+     * @return routes in the window with their planned stops, newest first
+     */
+    @Transactional(readOnly = true)
+    public List<RouteInfo> findRoutesInRange(LocalDate from, LocalDate to, Long repId) {
+        return routeRepository.findWithAssignmentsInRange(from, to, repId).stream()
+                .map(RoutingFacade::toInfo)
+                .toList();
+    }
 }

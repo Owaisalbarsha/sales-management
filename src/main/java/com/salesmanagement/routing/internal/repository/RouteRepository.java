@@ -92,4 +92,26 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     java.util.List<Route> findAllWithAssignmentsByRepresentativeIdAndRouteDate(
             @org.springframework.data.repository.query.Param("representativeId") Long representativeId,
             @org.springframework.data.repository.query.Param("routeDate")        LocalDate routeDate);
+
+    /**
+     * Routes in the half-open business-date window {@code [from, to)}, optionally scoped to one rep,
+     * with their assignments fetch-joined — backs {@code RoutingFacade.findRoutesInRange} for the
+     * reporting module.
+     *
+     * <p>{@code distinct} because the fetch join on the {@code assignments} bag multiplies rows.
+     * Only ONE collection is fetch-joined (assignments), so no MultipleBagFetchException. The rep
+     * filter uses the same {@code cast(:repId as long)} null-guard as {@code search}, to avoid the
+     * Postgres type-inference error on a nullable typed param.</p>
+     */
+    @Query("""
+            select distinct r from Route r
+            left join fetch r.assignments
+            where r.routeDate >= :from and r.routeDate < :to
+              and (cast(:repId as long) is null or r.representativeId = :repId)
+            order by r.routeDate desc, r.id desc
+            """)
+    List<Route> findWithAssignmentsInRange(@Param("from") LocalDate from,
+                                           @Param("to") LocalDate to,
+                                           @Param("repId") Long repId);
+
 }

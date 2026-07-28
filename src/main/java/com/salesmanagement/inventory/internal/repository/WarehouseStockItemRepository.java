@@ -1,5 +1,6 @@
 package com.salesmanagement.inventory.internal.repository;
 
+import com.salesmanagement.inventory.api.WarehouseStockInfo;
 import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -8,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -75,4 +77,41 @@ public interface WarehouseStockItemRepository extends JpaRepository<WarehouseSto
          WHERE w.product.id = :productId
         """)
     int increment(@Param("productId") Long productId, @Param("qty") int qty);
+
+    /**
+     * All products with their current warehouse on-hand and minimum — FR-120. LEFT JOIN keeps
+     * products that have never been stocked (no {@code WarehouseStockItem} row) in the result at
+     * {@code onHand = 0}; such a product is below-min whenever its minimum exceeds 0. One row per
+     * product, ordered by name. Scalar projection into the api DTO, so a column rename breaks
+     * compilation rather than failing at runtime.
+     */
+    @Query("""
+            select new com.salesmanagement.inventory.api.WarehouseStockInfo(
+                     p.id, p.name, p.sku,
+                     coalesce(ws.quantity, 0),
+                     p.minStockLevel,
+                     coalesce(ws.quantity, 0) < p.minStockLevel)
+            from Product p
+            left join WarehouseStockItem ws on ws.product = p
+            order by p.name asc
+            """)
+    List<WarehouseStockInfo> findAllWarehouseStock();
+
+    /**
+     * Only the products currently below minimum — FR-121 (low-stock / reorder list). Same shape as
+     * {@link #findAllWarehouseStock()} with the below-min predicate applied, so a never-stocked
+     * product with a positive minimum correctly appears here too.
+     */
+    @Query("""
+            select new com.salesmanagement.inventory.api.WarehouseStockInfo(
+                     p.id, p.name, p.sku,
+                     coalesce(ws.quantity, 0),
+                     p.minStockLevel,
+                     true)
+            from Product p
+            left join WarehouseStockItem ws on ws.product = p
+            where coalesce(ws.quantity, 0) < p.minStockLevel
+            order by p.name asc
+            """)
+    List<WarehouseStockInfo> findWarehouseStockBelowMinimum();
 }

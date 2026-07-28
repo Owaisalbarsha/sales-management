@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.salesmanagement.inventory.api.WarehouseStockInfo;
 
 import java.util.List;
 
@@ -294,6 +295,16 @@ public class StockService {
 
         log.info("Returned quantity={} of productId={} from van of representativeId={} to warehouse",
                 quantity, productId, representativeId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<WarehouseStockInfo> findAllWarehouseStock() {
+        return warehouseRepo.findAllWarehouseStock();
+    }
+
+    @Transactional(readOnly = true)
+    public List<WarehouseStockInfo> findWarehouseStockBelowMinimum() {
+        return warehouseRepo.findWarehouseStockBelowMinimum();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

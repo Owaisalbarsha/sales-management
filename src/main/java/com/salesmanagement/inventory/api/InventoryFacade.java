@@ -145,4 +145,30 @@ public class InventoryFacade {
                 .orElseThrow(() -> BusinessException.notFound(
                         "Product not found: " + productId, "PRODUCT_NOT_FOUND"));
     }
+
+    /**
+     * Every product's current warehouse stock against its minimum — backs FR-120 (warehouse stock
+     * levels) and is the superset FR-121 filters. One query, one row per product; the
+     * {@code belowMin} verdict is precomputed so reporting needs neither the threshold nor a second
+     * pass. A product with no warehouse row yet appears at {@code onHand = 0} (LEFT JOIN), so
+     * never-stocked products are not hidden from the stock report.
+     *
+     * @return warehouse stock lines for all products, ordered by name
+     */
+    @Transactional(readOnly = true)
+    public List<WarehouseStockInfo> findAllWarehouseStock() {
+        return stockService.findAllWarehouseStock();
+    }
+
+    /**
+     * Only the products currently below their minimum — the direct feed for FR-121 (low-stock /
+     * reorder report). Kept as its own query so the common "just the shortages" call doesn't transfer
+     * every product.
+     *
+     * @return warehouse stock lines where {@code onHand < minStockLevel}, ordered by name
+     */
+    @Transactional(readOnly = true)
+    public List<WarehouseStockInfo> findWarehouseStockBelowMinimum() {
+        return stockService.findWarehouseStockBelowMinimum();
+    }
 }

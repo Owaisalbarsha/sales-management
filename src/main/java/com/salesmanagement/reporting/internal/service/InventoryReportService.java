@@ -113,7 +113,7 @@ public class InventoryReportService {
                     long l = loaded.getOrDefault(id, 0L);
                     long r = returned.getOrDefault(id, 0L);
                     long s = sold.getOrDefault(id, 0L);
-                    return new MovementRow(id, names.getOrDefault(id, "—"), l, r, s, r - l - s);
+                    return new MovementRow(id, names.getOrDefault(id, "—"), l, r, s, l - s - r);
                 })
                 .sorted(Comparator.comparing(MovementRow::productName))
                 .toList();

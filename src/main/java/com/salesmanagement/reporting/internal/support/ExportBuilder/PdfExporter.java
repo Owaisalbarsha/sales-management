@@ -1,9 +1,12 @@
-package com.salesmanagement.reporting.internal.support;
+package com.salesmanagement.reporting.internal.support.ExportBuilder;
 
 import com.salesmanagement.shared.exception.BusinessException;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import com.salesmanagement.reporting.internal.support.*;
+import com.openhtmltopdf.bidi.support.ICUBidiSplitter;
+import com.openhtmltopdf.bidi.support.ICUBidiReorderer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -51,6 +54,11 @@ public class PdfExporter {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.useFont(fontFile.toFile(), FONT_FAMILY);
+
+            builder.useUnicodeBidiSplitter(new ICUBidiSplitter.ICUBidiSplitterFactory());
+            builder.useUnicodeBidiReorderer(new ICUBidiReorderer());
+            builder.defaultTextDirection(PdfRendererBuilder.TextDirection.RTL);
+
             builder.withHtmlContent(html, null);
             builder.toStream(out);
             builder.run();

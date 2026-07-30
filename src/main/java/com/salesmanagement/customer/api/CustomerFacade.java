@@ -7,6 +7,9 @@ import com.salesmanagement.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Collection;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Public API surface of the customer module — the only type other modules may
@@ -74,5 +77,23 @@ public class CustomerFacade {
         return customerRepository.findById(customerId)
                 .orElseThrow(() -> BusinessException.notFound(
                         "Customer not found: " + customerId, "CUSTOMER_NOT_FOUND"));
+    }
+
+    /**
+     * Resolves many customer ids to their names in ONE query — the batch the reporting module uses to
+     * label customer-grouped reports (FR-118/119) without an N+1 loop. Ids with no matching customer
+     * are simply absent from the returned map; the caller renders those as a placeholder rather than
+     * dropping the row.
+     *
+     * @param customerIds the ids to resolve
+     * @return id → name for every id that exists; empty map if {@code customerIds} is empty
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> getNamesByIds(Collection<Long> customerIds) {
+        if (customerIds == null || customerIds.isEmpty()) {
+            return Map.of();
+        }
+        return customerRepository.findAllById(customerIds).stream()
+                .collect(Collectors.toMap(Customer::getId, Customer::getName));
     }
 }

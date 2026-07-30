@@ -11,6 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Collection;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Public API surface of the inventory module — the only type other modules may import
@@ -170,5 +173,22 @@ public class InventoryFacade {
     @Transactional(readOnly = true)
     public List<WarehouseStockInfo> findWarehouseStockBelowMinimum() {
         return stockService.findWarehouseStockBelowMinimum();
+    }
+
+    /**
+     * Resolves many product ids to their names in ONE query — the batch reporting uses to label the
+     * fast/slow-moving report (FR-123) and any product-grouped output without an N+1 loop. Ids with no
+     * matching product are absent from the returned map.
+     *
+     * @param productIds the ids to resolve
+     * @return id → name for every id that exists; empty map if {@code productIds} is empty
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> getNamesByIds(Collection<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Map.of();
+        }
+        return productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Product::getName));
     }
 }

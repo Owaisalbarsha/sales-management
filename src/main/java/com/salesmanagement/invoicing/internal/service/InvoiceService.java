@@ -87,6 +87,7 @@ public class InvoiceService {
     private final InventoryFacade inventoryFacade;
     private final UserFacade userFacade;
     private final EpodStorageService epodStorage;
+    private final InvoicePdfService invoicePdfService;
     private final ApplicationEventPublisher events;
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -526,6 +527,51 @@ public class InvoiceService {
                     "Invoice " + invoice.getId() + " is not editable in status " + invoice.getStatus(),
                     "INVOICE_NOT_DRAFT");
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  PDF EXPORT (customer copy)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Renders a single invoice to a customer-facing PDF, applying the same read scope as
+     * {@link #getById}: a rep may export only their own invoices; managers and admin, any.
+     *
+     * <p>DRAFT invoices cannot be exported — a customer copy of an editable, unsubmitted invoice
+     * with no proof-of-delivery is a contradiction. Only SENT/APPROVED/REJECTED render.</p>
+     *
+     * @param id        the invoice to export
+     * @param callerId  the authenticated user
+     * @param oversight {@code true} when the caller is SALES_MANAGER or ADMIN
+     * @return the PDF bytes
+     * @throws BusinessException 404 unknown invoice; 403 a rep exporting another rep's invoice;
+     *                           409 attempting to export a DRAFT
+     */
+    public byte[] exportPdf(Long id, Long callerId, boolean oversight) {
+        Invoice invoice = reload(id);
+        if (!oversight) {
+            requireOwner(invoice, callerId);
+        }
+        if (invoice.isDraft()) {
+            throw BusinessException.conflict(
+                    "A DRAFT invoice cannot be exported to PDF", "INVOICE_PDF_DRAFT_NOT_ALLOWED");
+        }
+
+        // Resolve line product names/SKUs and party names once, reusing the same safe lookups
+        // as the JSON responses (null-tolerant, never fails the export on an orphaned reference).
+        Map<Long, ProductInfo> productInfos = fetchProductInfos(
+                invoice.getLines().stream().map(InvoiceLineItem::getProductId).collect(Collectors.toSet()));
+        Map<Long, String> productNames = new HashMap<>();
+        Map<Long, String> productSkus = new HashMap<>();
+        productInfos.forEach((pid, info) -> {
+            productNames.put(pid, info != null ? info.name() : null);
+            productSkus.put(pid, info != null ? info.sku() : null);
+        });
+
+        String customerName = safeCustomerName(invoice.getCustomerId());
+        String repName      = safeUserName(invoice.getRepresentativeId());
+
+        return invoicePdfService.render(invoice, productNames, productSkus, customerName, repName);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

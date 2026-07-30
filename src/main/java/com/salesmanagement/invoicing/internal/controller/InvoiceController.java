@@ -184,6 +184,26 @@ public class InvoiceController {
     }
 
     /**
+     * Downloads a customer-facing PDF copy of one invoice. Scoped like {@code getById}: a rep may
+     * export only their own invoices, managers and admin any. DRAFT invoices are refused (409).
+     *
+     * <p>Returns {@code application/pdf} as an attachment. The document is RTL Arabic, rendered
+     * from the invoice's stored values with the ePOD proof-of-delivery metadata included.</p>
+     */
+    @GetMapping("/{id}/pdf")
+    @PreAuthorize("hasAnyRole('SALES_REP', 'SALES_MANAGER', 'ADMIN')")
+    public ResponseEntity<byte[]> exportPdf(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id) {
+        byte[] pdf = invoiceService.exportPdf(id, principal.getUserId(), hasOversight(principal));
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"invoice-" + id + ".pdf\"")
+                .body(pdf);
+    }
+
+    /**
      * Downloads one ePOD artifact (signature or delivery photo). Scoped like {@code getById}: a
      * rep may only open their own invoice's proof, managers and admin may open any.
      *

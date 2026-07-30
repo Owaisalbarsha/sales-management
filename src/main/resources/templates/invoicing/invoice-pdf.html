@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        /*
+         * Embed the Arabic-capable font. The family name declared here ("NotoNaskhArabic")
+         * MUST match the family name registered in InvoicePdfService via addFont(...), or
+         * openhtmltopdf will silently fall back to a Latin-only font and Arabic glyphs render
+         * as blank boxes. The src url is resolved by the ClassLoader base set on the builder.
+         */
+        @font-face {
+            font-family: "NotoNaskhArabic";
+            src: url("fonts/NotoNaskhArabic-Regular.ttf");
+            font-weight: normal;
+            font-style: normal;
+            -fs-pdf-font-embed: embed;
+            -fs-pdf-font-encoding: Identity-H;
+        }
+
+        @page {
+            size: A4;
+            margin: 2cm 1.8cm;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "NotoNaskhArabic", sans-serif;
+            direction: rtl;
+            unicode-bidi: embed;
+            color: #1a1a1a;
+            font-size: 11pt;
+            line-height: 1.6;
+        }
+
+        .header {
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 20pt;
+            color: #2c3e50;
+        }
+
+        .invoice-number {
+            font-size: 12pt;
+            color: #555;
+            margin-top: 4px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 9pt;
+            background: #eef2f5;
+            color: #2c3e50;
+        }
+
+        .meta {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .meta td {
+            padding: 3px 0;
+            vertical-align: top;
+        }
+
+        .meta .label {
+            color: #777;
+            width: 30%;
+        }
+
+        table.lines {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 18px;
+        }
+
+        table.lines th {
+            background: #2c3e50;
+            color: #fff;
+            padding: 8px 10px;
+            text-align: right;
+            font-size: 10pt;
+        }
+
+        table.lines td {
+            padding: 7px 10px;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: right;
+        }
+
+        table.lines tr:nth-child(even) td {
+            background: #f9fafb;
+        }
+
+        .totals {
+            width: 100%;
+            margin-top: 6px;
+        }
+
+        .totals td {
+            padding: 6px 10px;
+        }
+
+        .totals .total-label {
+            text-align: left;
+            font-weight: bold;
+            font-size: 12pt;
+        }
+
+        .totals .total-value {
+            text-align: right;
+            font-weight: bold;
+            font-size: 12pt;
+            color: #2c3e50;
+            width: 30%;
+        }
+
+        .epod {
+            margin-top: 26px;
+            border-top: 1px dashed #bbb;
+            padding-top: 14px;
+        }
+
+        .epod h2 {
+            font-size: 12pt;
+            color: #2c3e50;
+            margin: 0 0 8px 0;
+        }
+
+        table.epod-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5pt;
+        }
+
+        table.epod-table th {
+            background: #eef2f5;
+            padding: 6px 8px;
+            text-align: right;
+            color: #555;
+        }
+
+        table.epod-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee;
+            text-align: right;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 8pt;
+            color: #999;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>فاتورة</h1>
+    <div class="invoice-number">
+        رقم الفاتورة: <span th:text="${view.invoiceNumber}">INV-0000</span>
+        &#160;·&#160;
+        <span class="status-badge" th:text="${view.status}">SENT</span>
+    </div>
+</div>
+
+<table class="meta">
+    <tr>
+        <td class="label">التاريخ</td>
+        <td th:text="${view.invoiceDate}">2026-07-24</td>
+    </tr>
+    <tr>
+        <td class="label">العميل</td>
+        <td th:text="${view.customerName}">اسم العميل</td>
+    </tr>
+    <tr>
+        <td class="label">المندوب</td>
+        <td th:text="${view.representativeName}">اسم المندوب</td>
+    </tr>
+</table>
+
+<table class="lines">
+    <thead>
+    <tr>
+        <th>المنتج</th>
+        <th>الرمز</th>
+        <th>الكمية</th>
+        <th>السعر</th>
+        <th>الخصم</th>
+        <th>المجموع</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="line : ${view.lines}">
+        <td th:text="${line.productName}">منتج</td>
+        <td th:text="${line.sku}">SKU</td>
+        <td th:text="${line.quantity}">1</td>
+        <td th:text="${line.price}">0.00</td>
+        <td th:text="${line.discount}">0.00</td>
+        <td th:text="${line.subtotal}">0.00</td>
+    </tr>
+    </tbody>
+</table>
+
+<table class="totals">
+    <tr>
+        <td class="total-label">الإجمالي</td>
+        <td class="total-value">
+            <span th:text="${view.totalAmount}">0.00</span>
+            <span th:text="${view.currencySymbol}"></span>
+        </td>
+    </tr>
+</table>
+
+<div class="epod" th:if="${!view.epodProofs.isEmpty()}">
+    <h2>إثبات التسليم</h2>
+    <table class="epod-table">
+        <thead>
+        <tr>
+            <th>النوع</th>
+            <th>وقت الالتقاط</th>
+            <th>الإحداثيات</th>
+            <th>البصمة</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="proof : ${view.epodProofs}">
+            <td th:text="${proof.type}">SIGNATURE</td>
+            <td th:text="${proof.capturedAt}">2026-07-24T09:30:00+03:00</td>
+            <td th:text="${proof.coordinates}">—</td>
+            <td th:text="${proof.hashShort}">a3f9c2...</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="footer">
+    تم إنشاء هذه الفاتورة إلكترونياً · <span th:text="${view.generatedAt}">2026-07-24</span>
+</div>
+
+</body>
+</html>

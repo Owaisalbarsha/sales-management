@@ -14,20 +14,21 @@ import java.time.Instant;
  * {@code null} name rather than a failed response.</p>
  */
 public record VisitResponse(
-        Long        id,
-        Long        routeId,
-        Long        customerId,
-        String      customerName,
-        Long        representativeId,
-        String      representativeName,
-        VisitStatus status,
-        Instant     checkInTime,
-        String      checkInLocation,
-        Instant     checkOutTime,
-        String      checkOutLocation,
-        Instant     createdAt,
-        Instant     updatedAt
-) {
+        Long          id,
+        Long          routeId,
+        String        routeName,
+        Long          customerId,
+        String        customerName,
+        Long          representativeId,
+        String        representativeName,
+        VisitStatus   status,
+        Instant       checkInTime,
+        String        checkInLocation,
+        Instant       checkOutTime,
+        String        checkOutLocation,
+        Instant       createdAt,
+        Instant       updatedAt
+)  {
     /**
      * Maps a {@link Visit} to its response projection.
      *
@@ -35,10 +36,11 @@ public record VisitResponse(
      * @param customerName       resolved customer name (may be {@code null} if unknown)
      * @param representativeName resolved rep name (may be {@code null} if unknown)
      */
-    public static VisitResponse from(Visit v, String customerName, String representativeName) {
+    public static VisitResponse from(Visit v, String routeName, String customerName, String representativeName) {
         return new VisitResponse(
                 v.getId(),
                 v.getRouteId(),
+                routeName,
                 v.getCustomerId(),
                 customerName,
                 v.getRepresentativeId(),

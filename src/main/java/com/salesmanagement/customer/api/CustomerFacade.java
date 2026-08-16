@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -94,6 +95,18 @@ public class CustomerFacade {
             return Map.of();
         }
         return customerRepository.findAllById(customerIds).stream()
+                .collect(Collectors.toMap(Customer::getId, Customer::getName));
+    }
+
+    /**
+     * Batch-resolves customer names for a set of ids. Returns a map of id -> name.
+     * Ids not found are absent from the map (no exception).
+     */
+    public Map<Long, String> getCustomerNames(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return customerRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Customer::getId, Customer::getName));
     }
 }

@@ -242,17 +242,23 @@ public class VisitService {
         Long effectiveRep = privileged ? representativeId : requesterId;
         Page<Visit> page = visitRepository.search(effectiveRep, routeId, customerId, status, pageable);
 
+        Set<Long> routeIds = new HashSet<>();
         Set<Long> customerIds = new HashSet<>();
         Set<Long> userIds = new HashSet<>();
         for (Visit v : page.getContent()) {
+            routeIds.add(v.getRouteId());
             customerIds.add(v.getCustomerId());
             userIds.add(v.getRepresentativeId());
         }
-        Map<Long, String> customerNames = resolveCustomerNames(customerIds);
-        Map<Long, String> userNames = resolveUserNames(userIds);
+        Map<Long, String> routeNames = routingFacade.getRouteNames(routeIds);
+        Map<Long, String> customerNames = customerFacade.getCustomerNames(customerIds);
+        Map<Long, String> userNames = userFacade.getNamesByIds(userIds);
 
         return PageResponse.of(page.map(v -> VisitResponse.from(
-                v, customerNames.get(v.getCustomerId()), userNames.get(v.getRepresentativeId()))));
+                v,
+                routeNames.get(v.getRouteId()),
+                customerNames.get(v.getCustomerId()),
+                userNames.get(v.getRepresentativeId()))));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -327,6 +333,7 @@ public class VisitService {
 
     private VisitResponse toResponse(Visit v) {
         return VisitResponse.from(v,
+                safeRouteName(v.getRouteId()),
                 safeCustomerName(v.getCustomerId()),
                 safeUserName(v.getRepresentativeId()));
     }
@@ -356,6 +363,14 @@ public class VisitService {
     private String safeUserName(Long userId) {
         try {
             return userFacade.getNameById(userId);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String safeRouteName(Long routeId) {
+        try {
+            return routingFacade.getRouteInfo(routeId).name();
         } catch (Exception ex) {
             return null;
         }

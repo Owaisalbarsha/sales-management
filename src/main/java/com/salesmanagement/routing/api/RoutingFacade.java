@@ -13,6 +13,9 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Public API surface of the {@code routing} module — the only type other modules may import
@@ -115,5 +118,18 @@ public class RoutingFacade {
         return routeRepository.findWithAssignmentsInRange(from, to, repId).stream()
                 .map(RoutingFacade::toInfo)
                 .toList();
+    }
+
+    /**
+     * Batch-resolves route names for a set of ids. Returns a map of id -> name.
+     * Ids not found in the DB are simply absent from the map (no exception).
+     * Prefer this over N calls to {@link #getRouteInfo} when resolving names for a list response.
+     */
+    public Map<Long, String> getRouteNames(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return routeRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Route::getId, Route::getName));
     }
 }

@@ -194,6 +194,15 @@
 			<version>3.3.4</version>
 		</dependency>
 
+		<!-- Firebase Admin SDK — server-side FCM push (FR-100/101).
+         Required at compile time (FcmChannel/FirebaseConfig import it);
+         the beans only activate when notification.fcm.enabled=true. -->
+		<dependency>
+			<groupId>com.google.firebase</groupId>
+			<artifactId>firebase-admin</artifactId>
+			<version>9.10.0</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>

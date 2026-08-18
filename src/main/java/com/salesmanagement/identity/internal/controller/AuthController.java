@@ -1,5 +1,6 @@
 package com.salesmanagement.identity.internal.controller;
 
+import com.salesmanagement.identity.api.UserLoggedOutEvent;
 import com.salesmanagement.identity.internal.service.TokenBlacklistStore;
 import com.salesmanagement.identity.internal.entity.User;
 import com.salesmanagement.identity.internal.dto.ChangePasswordRequest;
@@ -15,6 +16,7 @@ import com.salesmanagement.shared.security.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -22,6 +24,8 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
 
 /**
  * REST controller handling authentication lifecycle: login, token refresh, and logout.
@@ -65,6 +69,8 @@ public class AuthController {
     private final SessionService        sessionService;
     private final LoginAttemptService loginAttemptService;
     private final TokenBlacklistStore blacklistStore;
+    /** Publishes UserLoggedOutEvent so the notification module can drop device tokens (D2). */
+    private final ApplicationEventPublisher events;
 
     // ─── Endpoints ────────────────────────────────────────────────────────────
 
@@ -191,6 +197,12 @@ public class AuthController {
      * network retry) is safe — {@link SessionService#invalidateSession}
      * treats a missing session as a no-op.
      *
+     * <p>On logout a {@link UserLoggedOutEvent} is published so the notification
+     * module can delete this user's FCM device tokens (D2), stopping pushes to a
+     * device the user deliberately signed out of. The event is published after the
+     * session is invalidated; its consumer runs post-commit in its own transaction,
+     * so token cleanup can never fail or delay the logout response.
+     *
      * @param bearerToken the {@code Authorization} header containing the access token to invalidate
      * @return {@code 200 OK} with no body on success
      * @throws BusinessException {@code 400} if the Authorization header is missing or malformed
@@ -203,6 +215,8 @@ public class AuthController {
         long   userId = jwtService.extractUserId(token);
 
         sessionService.invalidateSession(userId);
+
+        events.publishEvent(new UserLoggedOutEvent(userId, Instant.now()));
 
         log.info("Logout successful: userId={}", userId);
 

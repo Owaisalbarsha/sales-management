@@ -9,6 +9,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import com.salesmanagement.identity.internal.entity.UserStatus;
+import com.salesmanagement.shared.security.UserRole;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
 
 import java.util.List;
 import java.util.Optional;
@@ -137,4 +142,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return number of users with that status
      */
     long countByStatus(UserStatus status);
+
+    /** Ids of all users in a given status. (ACTIVE) => announcement audience, FR-108. */
+    @Query("select u.id from User u where u.status = :status")
+    List<Long> findIdsByStatus(@Param("status") UserStatus status);
+
+    /** Ids of all users in a given status AND role. (ACTIVE + stock roles) => FR-106. */
+    @Query("select u.id from User u where u.status = :status and u.role = :role")
+    List<Long> findIdsByStatusAndRole(@Param("status") UserStatus status,
+                                      @Param("role") UserRole role);
+
 }

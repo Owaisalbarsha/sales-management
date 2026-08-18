@@ -7,6 +7,7 @@ import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -52,5 +53,30 @@ public class UserFacade {
         }
         return userRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(User::getId, User::getName));
+    }
+
+    /**
+     * The ids of every ACTIVE user. Added for the notification module's FR-108
+     * announcement fan-out, which must address all active users without reaching
+     * into identity's tables. Read-only; ids only (the caller writes one
+     * notification row per recipient and needs nothing more).
+     *
+     * @return active user ids; empty if there are none
+     */
+    public List<Long> findActiveUserIds() {
+        return userService.findActiveUserIds();
+    }
+
+    /**
+     * The ids of every ACTIVE user holding a given role. Added for the
+     * notification module's FR-106 low-stock alerts, which target the
+     * stock-managing roles (WAREHOUSE_MANAGER, SALES_MANAGER, ADMIN) without
+     * crossing into identity's tables. Read-only.
+     *
+     * @param role the role to filter by
+     * @return active user ids with that role; empty if there are none
+     */
+    public List<Long> findActiveUserIdsByRole(UserRole role) {
+        return userService.findActiveUserIdsByRole(role);
     }
 }

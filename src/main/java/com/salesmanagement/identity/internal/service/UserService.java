@@ -25,7 +25,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.salesmanagement.shared.security.UserRole;
+import com.salesmanagement.identity.internal.entity.UserStatus;
+import java.util.List;
 import java.util.List;
 
 /**
@@ -329,4 +331,17 @@ public class UserService implements UserDetailsService {
 
         return new UserListResponse(users, counts);
     }
+
+    /** Ids of all ACTIVE users — announcement audience (FR-108). */
+    @Transactional(readOnly = true)
+    public List<Long> findActiveUserIds() {
+        return userRepository.findIdsByStatus(UserStatus.ACTIVE);
+    }
+
+    /** Ids of all ACTIVE users with a given role — low-stock audience (FR-106). */
+    @Transactional(readOnly = true)
+    public List<Long> findActiveUserIdsByRole(UserRole role) {
+        return userRepository.findIdsByStatusAndRole(UserStatus.ACTIVE, role);
+    }
+
 }

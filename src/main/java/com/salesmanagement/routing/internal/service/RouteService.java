@@ -3,6 +3,7 @@ package com.salesmanagement.routing.internal.service;
 import com.salesmanagement.customer.api.CustomerFacade;
 import com.salesmanagement.customer.api.CustomerInfo;
 import com.salesmanagement.identity.api.UserFacade;
+import com.salesmanagement.routing.api.RouteAssignedEvent;
 import com.salesmanagement.routing.internal.dto.AssignCustomersRequest;
 import com.salesmanagement.routing.internal.dto.CreateRouteRequest;
 import com.salesmanagement.routing.internal.dto.ReorderRouteRequest;
@@ -19,10 +20,12 @@ import com.salesmanagement.shared.security.UserRole;
 import com.salesmanagement.territory.api.TerritoryFacade;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -58,6 +61,8 @@ public class RouteService {
     private final UserFacade userFacade;
     private final TerritoryFacade territoryFacade;
     private final CustomerFacade customerFacade;
+    /** Publishes RouteAssignedEvent so the notification module can alert the rep (FR-107). */
+    private final ApplicationEventPublisher events;
 
     // ── Commands ─────────────────────────────────────────────────────────────
 
@@ -108,6 +113,17 @@ public class RouteService {
         log.info("Created route id={} representativeId={} territoryId={} date={} stops={}",
                 saved.getId(), saved.getRepresentativeId(), saved.getTerritoryId(),
                 saved.getRouteDate(), saved.getAssignments().size());
+
+        // FR-107: a route is created for (i.e. assigned to) a rep — tell them. Published
+        // post-save; the notification listener runs post-commit in its own transaction, so a
+        // failed notification can never roll back the route creation. Fires on creation only;
+        // later stop edits (assignCustomers/removeCustomer) intentionally do not notify in v1.
+        events.publishEvent(new RouteAssignedEvent(
+                saved.getId(),
+                saved.getRepresentativeId(),
+                saved.getName(),
+                Instant.now()));
+
         return toResponse(saved);
     }
 

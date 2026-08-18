@@ -1,7 +1,9 @@
 package com.salesmanagement.inventory.internal.service;
 
 import com.salesmanagement.identity.api.UserFacade;
+import com.salesmanagement.inventory.api.LowStockDetectedEvent;
 import com.salesmanagement.inventory.api.VanInventoryItemInfo;
+import com.salesmanagement.inventory.internal.entity.Product;
 import com.salesmanagement.inventory.internal.entity.VanInventoryItem;
 import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 import com.salesmanagement.inventory.internal.dto.VanInventoryResponse;
@@ -14,11 +16,13 @@ import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.salesmanagement.inventory.api.WarehouseStockInfo;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -56,6 +60,8 @@ public class StockService {
     private final VanInventoryItemRepository vanRepo;
     private final ProductRepository productRepository;
     private final UserFacade userFacade;
+    /** Publishes LowStockDetectedEvent so the notification module can alert stock managers (FR-106). */
+    private final ApplicationEventPublisher events;
 
     // ── Warehouse: reads ──────────────────────────────────────────────────────
 
@@ -211,6 +217,11 @@ public class StockService {
         requireSalesRep(representativeId);
         requireProductExists(productId);
 
+        // Capture the warehouse quantity BEFORE the deduction, so we can detect a
+        // threshold crossing after it (FR-106). One cheap read; the row exists in
+        // practice because the product had to be stocked to be loadable.
+        int before = warehouseQuantityOrZero(productId);
+
         // 1. Take from the warehouse — atomic, cannot go below zero.
         int deducted = warehouseRepo.deductIfSufficient(productId, quantity);
         if (deducted == 0) {
@@ -232,10 +243,12 @@ public class StockService {
         log.info("Transferred quantity={} of productId={} from warehouse to van of representativeId={}",
                 quantity, productId, representativeId);
 
-        // DEFERRED (Notification module): if the warehouse quantity has now dropped below
-        // product.minStockLevel, publish a WarehouseStockLowEvent here so the notification
-        // module can alert the WAREHOUSE_MANAGER (FR-32 / FR-106). Intentionally not wired
-        // yet — no listener exists, and the event's shape will be driven by that module.
+        // 3. FR-106: if this deduction took the warehouse across its minimum, alert.
+        //    Published AFTER the atomic movement, on the crossing only (was >= min,
+        //    now < min), so a product that was already low does not re-alert on every
+        //    load. The consumer is an @ApplicationModuleListener (post-commit, own
+        //    transaction), so a failed notification can never roll back the transfer.
+        publishIfCrossedMinimum(productId, before, before - quantity);
     }
 
     /**
@@ -318,6 +331,31 @@ public class StockService {
     private void requireProductExists(Long productId) {
         if (!productRepository.existsById(productId)) {
             throw BusinessException.notFound("Product not found: " + productId, "PRODUCT_NOT_FOUND");
+        }
+    }
+
+    /**
+     * FR-106: publishes {@link LowStockDetectedEvent} iff this movement is the one that took
+     * the warehouse quantity from at/above the product's minimum to below it. Fires once, on
+     * the crossing — not while already low. A non-positive minimum (unset) never alerts,
+     * because {@code before >= min && after < min} then requires {@code after < 0}, which the
+     * BR-4 guard already prevents.
+     */
+    private void publishIfCrossedMinimum(Long productId, int before, int after) {
+        Product product = productRepository.findById(productId).orElse(null);
+        if (product == null) {
+            return; // product vanished mid-transaction; nothing sensible to alert on
+        }
+        int min = product.getMinStockLevel();
+        if (before >= min && after < min) {
+            events.publishEvent(new LowStockDetectedEvent(
+                    product.getId(),
+                    product.getName(),
+                    after,
+                    min,
+                    Instant.now()));
+            log.info("Low stock crossed for productId={} name='{}': {} -> {} (min {})",
+                    product.getId(), product.getName(), before, after, min);
         }
     }
 

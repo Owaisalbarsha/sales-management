@@ -1,38 +1,79 @@
 package com.salesmanagement.notification.internal.listener;
 
+import com.salesmanagement.identity.api.UserFacade;
 import com.salesmanagement.invoicing.api.InvoiceApprovedEvent;
 import com.salesmanagement.invoicing.api.InvoiceRejectedEvent;
+import com.salesmanagement.invoicing.api.InvoiceSubmittedEvent;
 import com.salesmanagement.notification.internal.enums.NotificationType;
 import com.salesmanagement.notification.internal.service.NotificationService;
+import com.salesmanagement.shared.security.UserRole;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
- * Raises notifications for invoice review outcomes (FR-103, FR-104).
+ * Raises notifications for invoice lifecycle events.
  *
- * <p>Consumes the events {@code invoicing} already publishes on approve/reject.
- * Each handler is an {@link ApplicationModuleListener}: it runs asynchronously
- * after the invoicing transaction commits, in its own transaction, and is backed
- * by Spring Modulith's event-publication log — so a failure here is retried
- * without affecting the invoice, and the notification is never silently lost.</p>
+ * <ul>
+ *   <li>FR-103 — approved → the rep who raised it.</li>
+ *   <li>FR-104 — rejected (with reason) → the rep who raised it.</li>
+ *   <li>Submit → the approvers (SALES_MANAGER + ADMIN): an invoice is awaiting review.
+ *       This is the counterpart of the rep-facing approve/reject alerts — without it,
+ *       managers would have to poll the invoice list to discover pending work.</li>
+ * </ul>
  *
- * <p><strong>FR-114 dedup.</strong> Each handler builds a deterministic
- * {@code sourceRef} ({@code "invoice:{id}:APPROVED"} / {@code ":REJECTED"}); a
- * retried delivery of the same event collides on the partial-unique index and is
- * a no-op inside {@link NotificationService#create}.</p>
- *
- * <p>The recipient is the invoice's {@code representativeId}, carried on the event
- * — the rep who raised it is the one told of its outcome. {@code referenceId} is
- * the invoice id, so the client can deep-link straight to it (FR-105).</p>
+ * <p>Each handler is an {@link ApplicationModuleListener}: async, post-commit, retried,
+ * cycle-free. Each builds a deterministic {@code sourceRef} so a redelivered event
+ * de-duplicates (FR-114) inside {@link NotificationService#create}.</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class InvoiceNotificationListener {
 
+    /** Roles that review invoices — the audience for a submitted invoice. */
+    private static final List<UserRole> APPROVER_ROLES =
+            List.of(UserRole.SALES_MANAGER, UserRole.ADMIN);
+
     private final NotificationService notificationService;
+    private final UserFacade userFacade;
+
+    /**
+     * Notify the approvers that a rep submitted an invoice awaiting review.
+     * Recipients are the active SALES_MANAGERs and ADMINs; the message names the rep.
+     */
+    @ApplicationModuleListener
+    void on(InvoiceSubmittedEvent event) {
+        Set<Long> recipients = new LinkedHashSet<>();
+        for (UserRole role : APPROVER_ROLES) {
+            recipients.addAll(userFacade.findActiveUserIdsByRole(role));
+        }
+        if (recipients.isEmpty()) {
+            log.warn("Invoice {} submitted but no active SALES_MANAGER/ADMIN to notify.",
+                    event.invoiceId());
+            return;
+        }
+
+        String repName = safeName(event.representativeId());
+        String title   = "Invoice awaiting review";
+        String message = repName + " submitted invoice #" + event.invoiceId() + " for review.";
+
+        for (Long userId : recipients) {
+            String sourceRef = "invoice:" + event.invoiceId() + ":SUBMITTED:user:" + userId;
+            notificationService.create(
+                    userId,
+                    NotificationType.INVOICE,
+                    title,
+                    message,
+                    sourceRef,
+                    event.invoiceId());
+        }
+    }
 
     /** FR-103: notify the rep their invoice was approved. */
     @ApplicationModuleListener
@@ -58,5 +99,14 @@ public class InvoiceNotificationListener {
                 "Your invoice #" + event.invoiceId() + " was rejected. Reason: " + event.reason(),
                 sourceRef,
                 event.invoiceId());
+    }
+
+    /** Rep name for the message, or a neutral fallback if the lookup fails. */
+    private String safeName(Long userId) {
+        try {
+            return userFacade.getNameById(userId);
+        } catch (Exception e) {
+            return "A representative";
+        }
     }
 }

@@ -61,4 +61,7 @@ public interface VisitRepository extends JpaRepository<Visit, Long> {
      * since an empty {@code IN ()} is not portable SQL.
      */
     List<Visit> findByRouteIdIn(Collection<Long> routeIds);
+
+    /** Offline sync idempotency (FR-99): the visit for a device-generated clientUuid, if any. */
+    Optional<Visit> findByClientUuid(String clientUuid);
 }

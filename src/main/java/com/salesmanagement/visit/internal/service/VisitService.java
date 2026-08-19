@@ -23,6 +23,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.salesmanagement.visit.api.OfflineVisitInput;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -259,6 +260,99 @@ public class VisitService {
                 routeNames.get(v.getRouteId()),
                 customerNames.get(v.getCustomerId()),
                 userNames.get(v.getRepresentativeId()))));
+    }
+
+    /**
+     * Replays an offline visit and returns its server id. Idempotent on {@code clientUuid}
+     * (FR-99). Honours the FR-95 duplicate-visit rule: if a visit already exists for the stop
+     * it is kept (first-persisted / earliest wins) and its id returned — no second row. Lands
+     * COMPLETED when a check-out time is present, else IN_PROGRESS (a later check-out arrives
+     * via {@link # recordOfflineCheckOut}). Drives route state exactly like an online check-in:
+     * starts a PLANNED route and finalises it when every stop is terminal.
+     *
+     * @param representativeId the rep, from the JWT principal (never the payload)
+     * @throws BusinessException 403 route not owned; 404 unknown route/customer;
+     *                           422 customer not on route, or a timestamp in the future / out of order
+     */
+    @Transactional
+    public Long recordOfflineVisit(Long representativeId, OfflineVisitInput in) {
+        var byUuid = visitRepository.findByClientUuid(in.clientUuid());
+        if (byUuid.isPresent()) {
+            return byUuid.get().getId();                       // idempotent replay (E3)
+        }
+
+        RouteInfo route = resolveOwnedRoute(representativeId, in.routeId());
+        requireCustomerExists(in.customerId());
+        requireCustomerOnRoute(in.routeId(), in.customerId());
+        requireNotFuture(in.checkInTime(), "checkInTime", "CHECK_IN_TIME_IN_FUTURE");
+
+        // FR-95 duplicate-visit merge: one visit per (route, customer). Keep the existing one.
+        var byStop = visitRepository.findByRouteIdAndCustomerId(in.routeId(), in.customerId());
+        if (byStop.isPresent()) {
+            log.info("Offline visit {} merges into existing visit {} (route {}, customer {})",
+                    in.clientUuid(), byStop.get().getId(), in.routeId(), in.customerId());
+            return byStop.get().getId();
+        }
+
+        Visit visit = Visit.checkIn(in.customerId(), representativeId, in.routeId(),
+                in.checkInTime(), in.checkInLocation());
+        visit.setClientUuid(in.clientUuid());
+
+        if (in.checkOutTime() != null) {                       // completed offline in one shot
+            requireNotFuture(in.checkOutTime(), "checkOutTime", "CHECK_OUT_TIME_IN_FUTURE");
+            if (in.checkInTime() != null && in.checkOutTime().isBefore(in.checkInTime())) {
+                throw BusinessException.unprocessable(
+                        "checkOutTime is before checkInTime", "CHECK_OUT_BEFORE_CHECK_IN");
+            }
+            visit.completeCheckOut(in.checkOutTime(), in.checkOutLocation());
+        }
+        Visit saved = visitRepository.save(visit);
+
+        if ("PLANNED".equals(route.status())) {
+            events.publishEvent(new RouteExecutionStarted(
+                    in.routeId(), representativeId, in.checkInTime()));
+        }
+        finaliseRouteIfAllTerminal(in.routeId());
+        log.info("Offline visit synced id={} clientUuid={} status={}",
+                saved.getId(), in.clientUuid(), saved.getStatus());
+        return saved.getId();
+    }
+
+    /**
+     * Applies an offline check-out to a visit whose check-in already synced (Fork H UPDATE),
+     * keyed by the check-in item's {@code clientUuid}. Idempotent: a check-out on an already
+     * COMPLETED visit is a no-op.
+     *
+     * @throws BusinessException 403 not the rep's visit; 404 no visit for that clientUuid;
+     *                           409 visit not IN_PROGRESS; 422 timestamp future / before check-in
+     */
+    @Transactional
+    public void recordOfflineCheckOut(Long representativeId, String visitClientUuid,
+                                      java.time.Instant checkOutTime, String checkOutLocation) {
+        Visit visit = visitRepository.findByClientUuid(visitClientUuid)
+                .orElseThrow(() -> BusinessException.notFound(
+                        "No visit for clientUuid " + visitClientUuid, "VISIT_NOT_FOUND"));
+
+        if (!visit.getRepresentativeId().equals(representativeId)) {
+            throw BusinessException.forbidden(
+                    "This visit belongs to another representative", "VISIT_NOT_OWNED");
+        }
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return;                                            // idempotent (E3)
+        }
+        if (visit.getStatus() != VisitStatus.IN_PROGRESS) {
+            throw BusinessException.conflict(
+                    "Visit is not in progress (status " + visit.getStatus() + ")",
+                    "VISIT_NOT_IN_PROGRESS");
+        }
+        requireNotFuture(checkOutTime, "checkOutTime", "CHECK_OUT_TIME_IN_FUTURE");
+        if (visit.getCheckInTime() != null && checkOutTime.isBefore(visit.getCheckInTime())) {
+            throw BusinessException.unprocessable(
+                    "checkOutTime is before checkInTime", "CHECK_OUT_BEFORE_CHECK_IN");
+        }
+        visit.completeCheckOut(checkOutTime, checkOutLocation);
+        visitRepository.save(visit);
+        finaliseRouteIfAllTerminal(visit.getRouteId());
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

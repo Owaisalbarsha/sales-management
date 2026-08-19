@@ -123,6 +123,17 @@ public class InventoryFacade {
     }
 
     /**
+     * Best-effort offline van deduction for a completed offline sale (Fork B/E). Records what it
+     * can, never rejects on shortfall, and returns the un-deducted remainder. Called by
+     * {@code invoicing} when replaying an offline invoice. See
+     * {@link StockService#applyOfflineVanDeduction}.
+     */
+    @Transactional
+    public int applyOfflineVanDeduction(Long representativeId, Long productId, int quantity) {
+        return stockService.applyOfflineVanDeduction(representativeId, productId, quantity);
+    }
+
+    /**
      * Morning van load: atomically move stock from the warehouse to a rep's van. Called by
      * {@code vanops} when a demand order is loaded. Enforces the warehouse floor and the
      * SALES_REP rule (see {@link StockService#transferWarehouseToVan}).

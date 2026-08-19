@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.salesmanagement.inventory.api.WarehouseStockInfo;
+import com.salesmanagement.inventory.api.VanStockDiscrepancyEvent;
 
 import java.time.Instant;
 import java.util.List;
@@ -196,6 +197,55 @@ public class StockService {
         }
         log.info("Deducted quantity={} from van of representativeId={} for productId={}",
                 quantity, representativeId, productId);
+    }
+
+    /**
+     * Authoritative offline van deduction (Fork B/E). Unlike {@link #deductVanStock}, this never
+     * rejects on shortfall — the goods already left the van in the field, and the mobile app is
+     * the primary BR-4 guard (FR-89). It deducts down to what is present (keeping the
+     * non-negative CHECK intact) and publishes {@link VanStockDiscrepancyEvent} for any
+     * un-deductible remainder, returning that shortfall.
+     *
+     * <p>ASSUMPTION (same as V11 tracking): one active device per rep, and no concurrent server
+     * deduction of a rep's van mid-day. Under that assumption a shortfall is exceptional. The
+     * single retry below covers the rare lost-guard race without looping.</p>
+     *
+     * @return the quantity that could NOT be deducted (0 in the normal case)
+     * @throws BusinessException 400 if quantity is not positive
+     */
+    @Transactional
+    public int applyOfflineVanDeduction(Long representativeId, Long productId, int quantity) {
+        requirePositive(quantity);
+
+        int deductedTotal = deductUpTo(representativeId, productId, quantity);
+        if (deductedTotal < quantity) {
+            // One retry to absorb a lost atomic-guard race; then accept the shortfall.
+            deductedTotal += deductUpTo(representativeId, productId, quantity - deductedTotal);
+        }
+
+        int shortfall = quantity - deductedTotal;
+        if (shortfall > 0) {
+            events.publishEvent(new VanStockDiscrepancyEvent(
+                    representativeId, productId, quantity, deductedTotal, shortfall, Instant.now()));
+            log.warn("Offline van deduction shortfall rep={} product={} requested={} deducted={} shortfall={}",
+                    representativeId, productId, quantity, deductedTotal, shortfall);
+        } else {
+            log.info("Offline van deduction rep={} product={} quantity={}",
+                    representativeId, productId, quantity);
+        }
+        return shortfall;
+    }
+
+    /** Deducts min(want, available) atomically; returns how many were actually taken. */
+    private int deductUpTo(Long representativeId, Long productId, int want) {
+        int available = vanRepo.findByRepresentativeIdAndProductId(representativeId, productId)
+                .map(VanInventoryItem::getQuantity)
+                .orElse(0);
+        int toDeduct = Math.min(want, available);
+        if (toDeduct > 0 && vanRepo.deductIfSufficient(representativeId, productId, toDeduct) == 1) {
+            return toDeduct;
+        }
+        return 0;
     }
 
     /**

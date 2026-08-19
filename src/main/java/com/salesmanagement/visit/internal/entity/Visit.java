@@ -76,6 +76,9 @@ public class Visit extends BaseEntity {
     @Column(nullable = false, length = 20)
     private VisitStatus status;
 
+    @Column(name = "client_uuid", length = 36)
+    private String clientUuid;
+
     private Visit(Long customerId, Long representativeId, Long routeId,
                   Instant checkInTime, String checkInLocation, VisitStatus status) {
         this.customerId = customerId;

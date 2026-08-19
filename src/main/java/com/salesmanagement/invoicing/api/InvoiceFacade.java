@@ -2,6 +2,7 @@ package com.salesmanagement.invoicing.api;
 
 import com.salesmanagement.invoicing.internal.enums.InvoiceStatus;
 import com.salesmanagement.invoicing.internal.repository.InvoiceRepository;
+import com.salesmanagement.invoicing.internal.service.InvoiceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +53,7 @@ public class InvoiceFacade {
             Set.of(InvoiceStatus.SENT, InvoiceStatus.APPROVED);
 
     private final InvoiceRepository invoiceRepository;
+    private final InvoiceService invoiceService;
 
     /**
      * Flat per-invoice rows for the tabular sales reports (FR-116, FR-117). Unbounded list, newest
@@ -91,5 +93,21 @@ public class InvoiceFacade {
      */
     public List<ProductSalesAggregate> aggregateProductSales(LocalDate from, LocalDate to) {
         return invoiceRepository.aggregateProductSales(from, to, REALISED_SALES);
+    }
+
+    /**
+     * Replays a completed offline sale as a SENT invoice in one transaction and returns its
+     * server id. Idempotent on {@code input.clientUuid} (a resend returns the existing invoice).
+     * Records the sale even when the customer is inactive or a price drifted (flagged via
+     * {@code OfflineInvoiceFlaggedEvent}); only unrecoverable problems (unknown product, missing
+     * ePOD type, invalid line) throw.
+     *
+     * @param representativeId the selling rep, from the JWT principal (never the payload)
+     * @param input            the offline invoice (frozen prices, staged ePOD tokens, pre-resolved visit)
+     * @return the created invoice's server id
+     */
+    @Transactional
+    public Long createFromOfflineSync(Long representativeId, OfflineInvoiceInput input) {
+        return invoiceService.createFromOfflineSync(representativeId, input);
     }
 }

@@ -5,6 +5,9 @@ import com.salesmanagement.visit.internal.repository.VisitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.salesmanagement.visit.internal.service.VisitService;
+import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
 
 import java.util.Collection;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.List;
 public class VisitFacade {
 
     private final VisitRepository visitRepository;
+    private final VisitService visitService;
 
     /** Whether a visit with this id exists. */
     public boolean existsById(Long visitId) {
@@ -82,5 +86,25 @@ public class VisitFacade {
                         v.getCheckInTime(),
                         v.getCheckOutTime()))
                 .toList();
+    }
+
+    /**
+     * Replays one offline visit, returning the new (or existing, on replay) server visit id.
+     * See {@code VisitService.recordOfflineVisit}. Used only by {@code sync}.
+     */
+    @Transactional
+    public Long recordOfflineVisit(Long representativeId, OfflineVisitInput input) {
+        return visitService.recordOfflineVisit(representativeId, input);
+    }
+
+    /**
+     * Applies an offline check-out to a previously-synced visit (Fork H UPDATE), keyed by the
+     * check-in's clientUuid. See {@code VisitService.recordOfflineCheckOut}. Used only by {@code sync}.
+     */
+    @Transactional
+    public void recordOfflineCheckOut(Long representativeId, String visitClientUuid,
+                                      Instant checkOutTime, String checkOutLocation) {
+        visitService.recordOfflineCheckOut(
+                representativeId, visitClientUuid, checkOutTime, checkOutLocation);
     }
 }

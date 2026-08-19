@@ -35,6 +35,8 @@ import java.util.Optional;
 import com.salesmanagement.invoicing.internal.dto.EpodFile;
 import com.salesmanagement.invoicing.internal.entity.EpodArtifact;
 import java.nio.file.Path;
+import com.salesmanagement.invoicing.api.OfflineInvoiceInput;
+import com.salesmanagement.invoicing.api.OfflineInvoiceFlaggedEvent;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -572,6 +574,122 @@ public class InvoiceService {
         String repName      = safeUserName(invoice.getRepresentativeId());
 
         return invoicePdfService.render(invoice, productNames, productSkus, customerName, repName);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Sync Related
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Replays a completed offline sale (create + submit collapsed) as a SENT invoice, in one
+     * transaction. Idempotent on {@code clientUuid} (returns the existing invoice on resend).
+     *
+     * <p>Differs from the online {@link #submit} in three deliberate ways:
+     * prices are the FROZEN offline prices from the payload, not re-captured (Fork C); the van
+     * deduction is best-effort and never rejects the sale (Fork B/E); and an inactive customer or
+     * a price drift is RECORDED WITH A FLAG (event), not thrown (Fork B/C). Only unrecoverable
+     * problems throw: unknown product (404), no lines, or a missing/invalid ePOD type.</p>
+     *
+     * @return the server invoice id
+     */
+    @Transactional
+    public Long createFromOfflineSync(Long representativeId, OfflineInvoiceInput in) {
+        var existing = invoiceRepository.findByClientUuid(in.clientUuid());
+        if (existing.isPresent()) {
+            return existing.get().getId();                     // idempotent replay (E3)
+        }
+
+        // Customer must exist (404 = unrecoverable); INACTIVE is flagged, not rejected.
+        if (!customerFacade.exists(in.customerId())) {
+            throw BusinessException.notFound(
+                    "Customer not found: " + in.customerId(), "CUSTOMER_NOT_FOUND");
+        }
+        boolean customerInactive = !customerFacade.isActive(in.customerId());
+
+        Invoice invoice = new Invoice(
+                in.customerId(), representativeId, in.visitId(), in.invoiceDate(), in.clientUuid());
+
+        boolean priceDrift = false;
+        for (OfflineInvoiceInput.Line l : in.lines()) {
+            requireProductExists(l.productId());               // discontinued allowed (D12); missing -> 404
+            // Conflict DETECTION only (FR-94): the frozen price wins, drift is flagged.
+            try {
+                if (l.price().compareTo(inventoryFacade.getProductPrice(l.productId())) != 0) {
+                    priceDrift = true;
+                }
+            } catch (BusinessException ignore) {
+                // price unavailable — no drift signal, not a failure
+            }
+            invoice.addLine(new InvoiceLineItem(l.productId(), l.quantity(), l.price(), l.discount()));
+        }
+        if (invoice.getLines().isEmpty()) {
+            throw BusinessException.unprocessable(
+                    "Cannot sync an invoice with no lines", "INVOICE_NO_LINES");
+        }
+
+        // Persist DRAFT first so the row has an id for the ePOD hash and stored path.
+        Invoice saved = invoiceRepository.save(invoice);
+
+        // Authoritative offline deduction (Fork B/E): best-effort, never rejects the sale.
+        for (InvoiceLineItem line : saved.getLines()) {
+            inventoryFacade.applyOfflineVanDeduction(
+                    representativeId, line.getProductId(), line.getQuantity());
+        }
+
+        // Freeze total; capture + hash ePOD over the frozen total (D16), same as online submit.
+        saved.recomputeTotal();
+        BigDecimal frozenTotal = saved.getTotalAmount();
+        requireBothEpodTypesOffline(in.artifacts());
+        for (OfflineInvoiceInput.Artifact art : in.artifacts()) {
+            EpodArtifactType type = parseEpodType(art.type());
+            byte[] bytes = epodStorage.readStaged(art.fileToken());
+            String hash = epodStorage.hash(bytes, saved.getId(), saved.getCustomerId(),
+                    frozenTotal, art.capturedAt(), art.latitude(), art.longitude());
+            String url = epodStorage.store(art.fileToken(), saved.getId(), type);
+            saved.addEpodArtifact(new EpodArtifact(
+                    type, url, hash, art.latitude(), art.longitude(), art.capturedAt()));
+        }
+
+        saved.markSent();
+        invoiceRepository.save(saved);
+
+        events.publishEvent(new InvoiceSubmittedEvent(
+                saved.getId(), saved.getRepresentativeId(), Instant.now()));
+        if (customerInactive) {
+            events.publishEvent(new OfflineInvoiceFlaggedEvent(saved.getId(), representativeId,
+                    "CUSTOMER_INACTIVE", "Customer " + in.customerId() + " was inactive at sync", Instant.now()));
+        }
+        if (priceDrift) {
+            events.publishEvent(new OfflineInvoiceFlaggedEvent(saved.getId(), representativeId,
+                    "PRICE_DRIFT", "One or more line prices differ from current server price", Instant.now()));
+        }
+
+        log.info("Synced offline invoice id={} clientUuid={} total={} inactiveCustomer={} priceDrift={}",
+                saved.getId(), in.clientUuid(), saved.getTotalAmount(), customerInactive, priceDrift);
+        return saved.getId();
+    }
+
+    /** Both ePOD types are mandatory on a synced sale too (parity with online submit). */
+    private void requireBothEpodTypesOffline(java.util.List<OfflineInvoiceInput.Artifact> artifacts) {
+        java.util.Set<EpodArtifactType> present = java.util.EnumSet.noneOf(EpodArtifactType.class);
+        for (OfflineInvoiceInput.Artifact a : artifacts) {
+            present.add(parseEpodType(a.type()));
+        }
+        for (EpodArtifactType required : EpodArtifactType.values()) {
+            if (!present.contains(required)) {
+                throw BusinessException.unprocessable(
+                        "Missing mandatory ePOD artifact: " + required, "EPOD_ARTIFACT_MISSING");
+            }
+        }
+    }
+
+    private EpodArtifactType parseEpodType(String raw) {
+        try {
+            return EpodArtifactType.valueOf(raw);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw BusinessException.unprocessable(
+                    "Unknown ePOD artifact type: " + raw, "EPOD_ARTIFACT_TYPE_INVALID");
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

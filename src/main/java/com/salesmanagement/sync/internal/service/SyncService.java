@@ -1,6 +1,5 @@
 package com.salesmanagement.sync.internal.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesmanagement.shared.exception.BusinessException;
 import com.salesmanagement.sync.internal.dto.SyncBatchRequest;
 import com.salesmanagement.sync.internal.dto.SyncBatchResponse;
@@ -16,6 +15,7 @@ import com.salesmanagement.tracking.api.TrackingFacade;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Comparator;

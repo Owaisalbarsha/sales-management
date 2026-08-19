@@ -1,6 +1,5 @@
 package com.salesmanagement.sync.internal.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesmanagement.invoicing.api.InvoiceFacade;
 import com.salesmanagement.invoicing.api.OfflineInvoiceInput;
 import com.salesmanagement.sync.internal.dto.SyncItemRequest;
@@ -18,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 

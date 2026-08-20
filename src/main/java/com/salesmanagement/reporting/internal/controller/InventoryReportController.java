@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.salesmanagement.reporting.internal.dto.InventoryReportDtos.StockVarianceRow;
+import com.salesmanagement.reporting.internal.dto.InventoryReportDtos.StockVarianceReport;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -126,5 +128,26 @@ public class InventoryReportController {
         }
         return responseFactory.file(fmt, "fill-rate",
                 () -> inventoryReportService.fillRateTable(range));
+    }
+
+    /**
+     * FR-124: stock variance for one finalized count. Takes {@code countId} (variance is per-count, not
+     * per date window — it is point-in-time as of the count's finalize instant). The manager picks the
+     * count from the write-side list ({@code GET /api/stock-counts}) and passes its id. A missing or
+     * still-DRAFT count yields 404/409 from the facade. The response carries the count's date/time so
+     * the report is a dated audit document.
+     */
+    @GetMapping("/stock-variance")
+    public ResponseEntity<?> stockVariance(
+            @RequestParam Long countId,
+            @RequestParam(required = false) String format) {
+
+        Format fmt = responseFactory.parse(format);
+        if (fmt == Format.JSON) {
+            StockVarianceReport report = inventoryReportService.stockVariance(countId);
+            return ResponseEntity.ok(ApiResponse.ok(report));
+        }
+        return responseFactory.file(fmt, "stock-variance-" + countId,
+                () -> inventoryReportService.stockVarianceTable(countId));
     }
 }

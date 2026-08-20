@@ -1,6 +1,8 @@
 package com.salesmanagement.reporting.internal.dto;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -80,5 +82,41 @@ public final class InventoryReportDtos {
     /** Envelope carrying the resolved window (or the threshold, for aging) with the rows. */
     public record InventoryEnvelope<T>(
             List<T> rows
+    ) {}
+
+    /**
+     * FR-124: one row per product on a finalized stock count — what the system had (recorded) vs what
+     * the manager physically counted, and the gap. A negative variance is a shortage (shrinkage,
+     * miscount, unrecorded movement); positive is surplus. Audit only: this report never adjusts stock.
+     *
+     * @param productId    the product id
+     * @param productName  product name (carried by the facade — no round-trip)
+     * @param sku          product SKU
+     * @param recorded     system quantity snapshotted at the count's finalize instant
+     * @param counted      the manager's physical count
+     * @param variance     {@code counted − recorded}; negative = short, positive = surplus
+     */
+    public record StockVarianceRow(
+            Long   productId,
+            String productName,
+            String sku,
+            int    recorded,
+            int    counted,
+            int    variance
+    ) {}
+
+    /**
+     * The variance report envelope: the count's own identity/timing (shown once in the header, not per
+     * row) plus the variance rows. Timestamps come from the count header, so the report is a dated audit
+     * document, not an anonymous table.
+     *
+     * @param countDate   the business date the count was taken
+     * @param finalizedAt the instant the count was frozen (recorded quantities snapshotted here)
+     * @param rows        per-product variance
+     */
+    public record StockVarianceReport(
+            LocalDate countDate,
+            Instant finalizedAt,
+            List<StockVarianceRow>  rows
     ) {}
 }

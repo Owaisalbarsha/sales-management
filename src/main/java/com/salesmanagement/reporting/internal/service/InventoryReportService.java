@@ -19,6 +19,16 @@ import com.salesmanagement.vanops.api.VanopsFacade;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.salesmanagement.inventory.api.StockVarianceInfo;
+import com.salesmanagement.reporting.internal.dto.InventoryReportDtos.StockVarianceRow;
+import com.salesmanagement.inventory.api.StockCountSummaryInfo;
+import com.salesmanagement.inventory.api.StockVarianceInfo;
+import com.salesmanagement.reporting.internal.dto.InventoryReportDtos.StockVarianceReport;
+import com.salesmanagement.reporting.internal.dto.InventoryReportDtos.StockVarianceRow;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -57,6 +67,9 @@ public class InventoryReportService {
     private final VanopsFacade vanopsFacade;
     private final InvoiceFacade invoiceFacade;
     private final ConfigFacade configFacade;
+
+    private static final DateTimeFormatter VARIANCE_STAMP =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     // ── FR-120 / FR-121: stock levels ─────────────────────────────────────────
 
@@ -291,5 +304,63 @@ public class InventoryReportService {
             case "SLOW" -> "بطيء الحركة";  // slow-moving
             default -> "متوسط";            // mid
         };
+    }
+
+    /**
+     * FR-124 stock variance for one finalized count, wrapped with the count's date/time so the report
+     * is a dated audit document. Rows carry product name + sku from the facade (no round-trip); sorted
+     * biggest-shortage-first. The header timing is looked up from the count summary list and matched by
+     * id — cheap (the list is small), so no single-header facade method is needed.
+     *
+     * @param stockCountId a FINALIZED count's id
+     * @throws com.salesmanagement.shared.exception.BusinessException 404 if the count does not exist,
+     *         409 if it is still DRAFT (both raised by the facade)
+     */
+    public StockVarianceReport stockVariance(Long stockCountId) {
+        List<StockVarianceRow> rows = inventoryFacade.getStockVariance(stockCountId).stream()
+                .map(v -> new StockVarianceRow(
+                        v.productId(), v.productName(), v.sku(),
+                        v.recordedQuantity(), v.countedQuantity(), v.variance()))
+                .sorted(java.util.Comparator.comparingInt(StockVarianceRow::variance))
+                .toList();
+
+        // Header timing from the count summary (matched by id). Absent only in a race where the count
+        // vanished between the two calls — then timings are null and the report still renders its rows.
+        StockCountSummaryInfo header = inventoryFacade.getStockCounts().stream()
+                .filter(s -> s.stockCountId().equals(stockCountId))
+                .findFirst()
+                .orElse(null);
+
+        return new StockVarianceReport(
+                header != null ? header.countDate() : null,
+                header != null ? header.finalizedAt() : null,
+                rows);
+    }
+
+    /** Stock variance as an export table, with the count's date/time in the title. */
+    public ReportTable stockVarianceTable(Long stockCountId) {
+        StockVarianceReport report = stockVariance(stockCountId);
+
+        String stamp = report.finalizedAt() == null
+                ? (report.countDate() == null ? "" : report.countDate().toString())
+                : ZonedDateTime.ofInstant(report.finalizedAt(), ReportingConfig.BUSINESS_ZONE)
+                .format(VARIANCE_STAMP);
+
+        String title = "تقرير فروقات الجرد"                 // "Stock variance report"
+                + (stamp.isEmpty() ? "" : " — " + stamp);
+
+        List<List<String>> rows = report.rows().stream()
+                .map(r -> List.of(
+                        r.productName(),
+                        r.sku(),
+                        String.valueOf(r.recorded()),
+                        String.valueOf(r.counted()),
+                        String.valueOf(r.variance())))
+                .toList();
+
+        return new ReportTable(
+                title,
+                List.of("المنتج", "الرمز", "المسجّل", "المجرود", "الفرق"), // product, sku, recorded, counted, variance
+                rows);
     }
 }

@@ -3,6 +3,7 @@ package com.salesmanagement.inventory.api;
 import com.salesmanagement.inventory.internal.entity.Product;
 import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import com.salesmanagement.inventory.internal.repository.ProductRepository;
+import com.salesmanagement.inventory.internal.service.StockCountService;
 import com.salesmanagement.inventory.internal.service.StockService;
 import com.salesmanagement.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class InventoryFacade {
 
     private final ProductRepository productRepository;
     private final StockService stockService;
+    private final StockCountService stockCountService;
 
     // ── Product reads (used by invoicing, vanops) ────────────────────────────
 
@@ -201,5 +203,28 @@ public class InventoryFacade {
         }
         return productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Product::getName));
+    }
+
+    /**
+     * Per-product variance for a finalized stock count — the data the {@code reporting} module
+     * renders as the Stock Variance Report (FR-124). {@code variance = counted - recorded}, where
+     * {@code recorded} is the warehouse figure snapshotted at the instant the count was finalized.
+     * Read-only: this never corrects stock.
+     *
+     * @throws BusinessException 404 if no such count; 409 if the count is still DRAFT
+     *                           (variance is undefined until finalized)
+     */
+    @Transactional(readOnly = true)
+    public List<StockVarianceInfo> getStockVariance(Long stockCountId) {
+        return stockCountService.getVariance(stockCountId);
+    }
+
+    /**
+     * Header summaries of every stock count (newest first) — lets {@code reporting} present a
+     * picker and filter to FINALIZED counts before requesting variance.
+     */
+    @Transactional(readOnly = true)
+    public List<StockCountSummaryInfo> getStockCounts() {
+        return stockCountService.listSummaries();
     }
 }

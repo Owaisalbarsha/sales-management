@@ -8,7 +8,7 @@ package com.salesmanagement.shared.security;
  */
 public interface JwtTokenValidator {
     boolean isTokenValid(String token);
-    String  extractEmail(String token);
+    String  extractSubject(String token);
     long    extractUserId(String token);
     java.util.Date extractExpiry(String token);
 }

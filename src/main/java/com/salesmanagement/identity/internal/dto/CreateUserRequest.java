@@ -2,10 +2,7 @@ package com.salesmanagement.identity.internal.dto;
 
 import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.security.UserRole;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 
 /**
  * Inbound payload for {@code POST /api/users} — ADMIN only (BR-7).
@@ -32,15 +29,9 @@ public record CreateUserRequest(
         @Size(min = 2, max = 255, message = "Name must be between 2 and 255 characters")
         String name,
 
-        /**
-         * Email address, serves as the unique login identifier.
-         * Must not already exist in the system — {@link UserService}
-         * rejects duplicates with a {@link com.salesmanagement.shared.exception.BusinessException}
-         * before attempting to persist.
-         */
-        @NotBlank(message = "Email is required")
-        @Email(message = "Must be a valid email address")
-        String email,
+        @NotBlank(message = "Phone number is required")
+        @Pattern(regexp = "^\\+?[0-9]{7,15}$", message = "Must be a valid phone number")
+        String phoneNumber,
 
         /**
          * Initial password chosen by the ADMIN for the new account.

@@ -28,7 +28,7 @@ public class UserFacade {
     public UserInfo findById(Long userId) {
         User user = userService.getById(userId);
         return new UserInfo(user.getId(), user.getName(),
-                user.getEmail(), user.getRole());
+                user.getPhoneNumber(), user.getRole());
     }
 
     public UserRole getRoleById(Long userId) {

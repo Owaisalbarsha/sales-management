@@ -3,6 +3,7 @@ package com.salesmanagement.identity.internal.dto;
 import com.salesmanagement.identity.internal.service.UserService;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -19,14 +20,10 @@ import jakarta.validation.constraints.Size;
  */
 public record LoginRequest(
 
-        /**
-         * The user's registered email address, used as the login identifier.
-         * Lowercased before lookup in {@link UserService}
-         * to ensure case-insensitive matching regardless of how the user types it.
-         */
-        @NotBlank(message = "Email is required")
-        @Email(message = "Must be a valid email address")
-        String email,
+
+        @NotBlank(message = "Phone number is required")
+        @Pattern(regexp = "^\\+?[0-9]{7,15}$", message = "Must be a valid phone number")
+        String phoneNumber,
 
         /**
          * The user's raw password, matched against the stored BCrypt hash.

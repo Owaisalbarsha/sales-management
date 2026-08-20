@@ -31,8 +31,8 @@ public record LoginResponse(
         /** Full display name, ready to render in the UI header. */
         String name,
 
-        /** Email of the authenticated user, useful for display and support. */
-        String email,
+
+        String phoneNumber,
 
         /**
          * The role that governs what this user can see and do.

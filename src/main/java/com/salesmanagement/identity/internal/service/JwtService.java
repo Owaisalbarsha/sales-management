@@ -151,7 +151,7 @@ public class JwtService implements JwtTokenValidator {
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())   // jti — blacklist key
                 .claims(extraClaims)
-                .subject(user.getEmail())
+                .subject(user.getPhoneNumber())
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + expiryMs))
                 .signWith(signingKey())
@@ -183,16 +183,9 @@ public class JwtService implements JwtTokenValidator {
         }
     }
 
-    /**
-     * Extracts the {@code sub} claim — the user's email.
-     *
-     * <p>Must only be called after {@link #isTokenValid} returns {@code true}.
-     *
-     * @param token a validated JWT string
-     * @return the email address embedded in the {@code sub} claim
-     */
+
     @Override
-    public String extractEmail(String token) {
+    public String extractSubject(String token) {
         return parseClaims(token).getSubject();
     }
 

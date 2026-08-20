@@ -41,7 +41,7 @@ import java.time.Instant;
  * <ol>
  *   <li>{@link AuthenticationManager} delegates to {@link UserService#loadUserByUsername}
  *       to verify credentials via Spring Security's standard pipeline.</li>
- *   <li>{@link UserService#getByEmail} loads the full {@link User} entity needed
+ *   <li>{@link UserService#getByPhoneNumber} loads the full {@link User} entity needed
  *       for token generation.</li>
  *   <li>{@link JwtService} issues the access and refresh tokens.</li>
  *   <li>{@link SessionService} revokes any previous session and registers the new one,
@@ -96,8 +96,8 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request) {
 
         // ── Lockout check — before any authentication work ──────────────
-        if (loginAttemptService.isLocked(request.email())) {
-            long minutes = loginAttemptService.getRemainingLockoutMinutes(request.email());
+        if (loginAttemptService.isLocked(request.phoneNumber())) {
+            long minutes = loginAttemptService.getRemainingLockoutMinutes(request.phoneNumber());
             throw BusinessException.badRequest(
                     "Account temporarily locked due to too many failed attempts. Try again in "
                             + minutes + " minutes.",
@@ -108,20 +108,20 @@ public class AuthController {
         try {
             authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            request.email().toLowerCase(),
+                            request.phoneNumber().toLowerCase(),
                             request.password()));
         } catch (BadCredentialsException | DisabledException e) {
             // ── Record the failure ──────────────────────────────────────
-            loginAttemptService.recordFailure(request.email());
+            loginAttemptService.recordFailure(request.phoneNumber());
             throw BusinessException.badRequest(
                     "Invalid email or password",
                     "INVALID_CREDENTIALS");
         }
 
         // ── Login succeeded — clear any previous failures ───────────────
-        loginAttemptService.recordSuccess(request.email());
+        loginAttemptService.recordSuccess(request.phoneNumber());
 
-        User user            = userService.getByEmail(authentication.getName());
+        User user            = userService.getByPhoneNumber(authentication.getName());
         String accessToken   = jwtService.generateAccessToken(user);
         String refreshToken  = jwtService.generateRefreshToken(user);
 
@@ -168,7 +168,7 @@ public class AuthController {
                     "REVOKED_REFRESH_TOKEN");
         }
 
-        User user = userService.getByEmail(jwtService.extractEmail(refreshToken));
+        User user = userService.getByPhoneNumber(jwtService.extractSubject(refreshToken));
 
         if (!user.canLogin()) {
             throw BusinessException.forbidden(
@@ -267,7 +267,7 @@ public class AuthController {
         return new LoginResponse(
                 user.getId(),
                 user.getName(),
-                user.getEmail(),
+                user.getPhoneNumber(),
                 user.getRole(),
                 accessToken,
                 refreshToken);

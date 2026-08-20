@@ -30,7 +30,7 @@ import java.nio.charset.StandardCharsets;
  * Responsibility chain:
  * 1. Extract "Bearer <token>" from Authorization header.
  * 2. Parse and validate the JWT (signature, expiry, structure).
- * 3. Extract claims: userId, email, role, status.
+ * 3. Extract claims: userId, phoneNumber , role, status.
  * 4. Build UserPrincipal, wrap in UsernamePasswordAuthenticationToken.
  * 5. Store in SecurityContextHolder for the duration of the request.
  * 6. Let the filter chain continue — @PreAuthorize handles role enforcement.
@@ -50,7 +50,7 @@ import java.nio.charset.StandardCharsets;
  *   This avoids shared depending on Redis or identity internals.
  *
  * JWT claims expected:
- *   sub   : email (String)
+ *   sub   : phoneNumber  (String)
  *   userId: Long
  *   role  : UserRole name (String, e.g. "SALES_REP")
  *   status: String ("ACTIVE" | "INACTIVE" | "SUSPENDED")
@@ -111,11 +111,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
 
             Long     userId = claims.get("userId", Long.class);
-            String   email  = claims.getSubject();
+            String   phoneNumber   = claims.getSubject();
             String   role   = claims.get("role",   String.class);
             String   status = claims.get("status", String.class);
 
-            if (userId == null || email == null || role == null || status == null) {
+            if (userId == null || phoneNumber  == null || role == null || status == null) {
                 log.warn("JWT missing required claims");
                 sendUnauthorized(response, "Invalid token structure");
                 return;
@@ -130,7 +130,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
-            UserPrincipal principal = new UserPrincipal(userId, email, userRole, status);
+            UserPrincipal principal = new UserPrincipal(userId, phoneNumber , userRole, status);
 
             // isEnabled() returns false for INACTIVE, isAccountNonLocked() for SUSPENDED.
             // Spring Security's pre-auth checks will reject them with 403,

@@ -94,10 +94,10 @@ public class UserService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return userRepository.findByEmail(email.toLowerCase())
+        return userRepository.findByPhoneNumber(email.toLowerCase())
                 .filter(User::canLogin)
                 .map(user -> org.springframework.security.core.userdetails.User
-                        .withUsername(user.getEmail())
+                        .withUsername(user.getPhoneNumber())
                         .password(user.getPasswordHash())
                         .roles(user.getRole().name())
                         .build())
@@ -139,8 +139,8 @@ public class UserService implements UserDetailsService {
      * @throws BusinessException if no user exists with the given email
      */
     @Transactional(readOnly = true)
-    public User getByEmail(String email) {
-        return userRepository.findByEmail(email.toLowerCase())
+    public User getByPhoneNumber(String email) {
+        return userRepository.findByPhoneNumber(email.toLowerCase())
                 .orElseThrow(() -> BusinessException.notFound(
                         "User not found with email: " + email,
                         "USER_NOT_FOUND"));
@@ -201,15 +201,15 @@ public class UserService implements UserDetailsService {
      */
     @Transactional
     public User create(CreateUserRequest request) {
-        if (userRepository.existsByEmail(request.email().toLowerCase())) {
+        if (userRepository.existsByPhoneNumber(request.phoneNumber().toLowerCase())) {
             throw BusinessException.conflict(
-                    "Email already in use: " + request.email(),
+                    "Email already in use: " + request.phoneNumber(),
                     "EMAIL_ALREADY_IN_USE");
         }
 
         User user = new User(
                 request.name(),
-                request.email().toLowerCase(),
+                request.phoneNumber().toLowerCase(),
                 passwordEncoder.encode(request.password()),
                 request.role()
         );
@@ -221,7 +221,7 @@ public class UserService implements UserDetailsService {
                 new UserCreatedEvent(
                         saved.getId(),
                         saved.getName(),
-                        saved.getEmail(),
+                        saved.getPhoneNumber(),
                         saved.getRole()));
 
         return saved;

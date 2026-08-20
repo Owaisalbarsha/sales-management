@@ -32,8 +32,7 @@ public record UserResponse(
         /** Full display name. */
         String name,
 
-        /** Login email — also the unique business identifier. */
-        String email,
+        String phoneNumber,
 
         /** Assigned role governing system access and permissions. */
         UserRole role,
@@ -64,7 +63,7 @@ public record UserResponse(
         return new UserResponse(
                 user.getId(),
                 user.getName(),
-                user.getEmail(),
+                user.getPhoneNumber(),
                 user.getRole(),
                 user.getStatus(),
                 user.getCreatedAt()

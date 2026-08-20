@@ -38,7 +38,7 @@ public class User extends BaseEntity {
 
     @EqualsAndHashCode.Include
     @Column(nullable = false, unique = true)
-    private String email;
+    private String phoneNumber;
 
     /**
      * BCrypt hash of the user's password.
@@ -76,13 +76,13 @@ public class User extends BaseEntity {
      * reach this constructor.
      *
      * @param name         full display name
-     * @param email        unique login email (lowercased by caller)
+     * @param phoneNumber;        unique login email (lowercased by caller)
      * @param passwordHash BCrypt hash produced by {@code PasswordEncoder}
      * @param role         assigned role from the fixed role set
      */
-    public User(String name, String email, String passwordHash, UserRole role) {
+    public User(String name, String phoneNumber, String passwordHash, UserRole role) {
         this.name         = name;
-        this.email        = email;
+        this.phoneNumber  = phoneNumber;
         this.passwordHash = passwordHash;
         this.role         = role;
         this.status       = UserStatus.ACTIVE;

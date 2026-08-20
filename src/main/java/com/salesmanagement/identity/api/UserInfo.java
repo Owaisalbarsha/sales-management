@@ -9,6 +9,6 @@ import com.salesmanagement.shared.security.UserRole;
 public record UserInfo(
         Long     id,
         String   name,
-        String   email,
+        String phoneNumber,
         UserRole role
 ) {}

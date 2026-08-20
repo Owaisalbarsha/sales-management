@@ -56,10 +56,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * That decision (throw {@link com.salesmanagement.shared.exception.BusinessException},
      * return a default, etc.) belongs to the service layer.
      *
-     * @param email the lowercase email address to search for
+     *
      * @return an {@link Optional} containing the user if found, empty otherwise
      */
-    Optional<User> findByEmail(String email);
+    Optional<User> findByPhoneNumber(String phoneNumber);
 
     /**
      * Checks whether any user account is already registered with the given email.
@@ -69,10 +69,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Prefer this over {@code findByEmail(...).isPresent()} — it issues a
      * {@code SELECT 1} existence check instead of loading the full entity.
      *
-     * @param email the lowercase email address to check
+     *
      * @return {@code true} if an account with this email exists, {@code false} otherwise
      */
-    boolean existsByEmail(String email);
+    boolean existsByPhoneNumber(String phoneNumber);
 
     /**
      * Returns all users assigned to the given role.
@@ -123,7 +123,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
         SELECT u FROM User u
         WHERE (:search = ''
                OR LOWER(u.name)  LIKE LOWER(CONCAT('%', :search, '%'))
-               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))
+               OR u.phoneNumber LIKE CONCAT('%', :search, '%'))
           AND (:role   IS NULL OR u.role   = :role)
           AND (:status IS NULL OR u.status = :status)
         """)

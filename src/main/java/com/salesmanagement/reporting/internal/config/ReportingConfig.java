@@ -47,4 +47,13 @@ public final class ReportingConfig {
 
     /** Compiled-in fallback for {@link #KEY_STOCK_AGING_DAYS}. */
     public static final int DEFAULT_STOCK_AGING_DAYS = 30;
+
+    /**
+     * systemconfig key: the number of days without a realised invoice after which a customer is flagged
+     * "dormant" in the churn report. Tunable per how the business defines lapsed.
+     */
+    public static final String KEY_DORMANT_DAYS = "REPORTING_DORMANT_DAYS";
+
+    /** Compiled-in fallback for {@link #KEY_DORMANT_DAYS}. */
+    public static final int DEFAULT_DORMANT_DAYS = 60;
 }

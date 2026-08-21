@@ -9,7 +9,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Public API surface of the {@code invoicing} module for cross-module <em>reads</em> — the only
@@ -109,5 +111,20 @@ public class InvoiceFacade {
     @Transactional
     public Long createFromOfflineSync(Long representativeId, OfflineInvoiceInput input) {
         return invoiceService.createFromOfflineSync(representativeId, input);
+    }
+
+    /**
+     * Last realised-invoice date per customer — the map the dormant-customers report uses to decide who
+     * has gone quiet. Only {SENT, APPROVED} count (same realised-sales filter as the aggregates). A
+     * customer absent from the map has never had a realised invoice; the report treats that as the
+     * strongest dormancy signal.
+     *
+     * @return customerId → most recent realised invoice date
+     */
+    public Map<Long, LocalDate> getLastInvoiceDates() {
+        return invoiceRepository.findLastInvoiceDatePerCustomer(REALISED_SALES).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (LocalDate) row[1]));
     }
 }

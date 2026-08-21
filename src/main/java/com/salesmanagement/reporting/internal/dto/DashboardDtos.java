@@ -29,7 +29,12 @@ public final class DashboardDtos {
             long       todayInvoiceCount,
             BigDecimal monthSalesTotal,
             long       monthInvoiceCount,
-            long       activeRoutesToday
+            long       activeRoutesToday,
+            String     topTerritoryName,
+            BigDecimal topTerritorySales,
+            String     topRepName,
+            BigDecimal topRepSales,
+            BigDecimal monthOverMonthPercent
     ) {}
 
     /**
@@ -44,6 +49,7 @@ public final class DashboardDtos {
             long       belowMinimumCount,
             long       agingCount,
             long       totalSkus,
-            BigDecimal monthFillRatePercent
+            BigDecimal monthFillRatePercent,
+            BigDecimal totalStockValue
     ) {}
 }

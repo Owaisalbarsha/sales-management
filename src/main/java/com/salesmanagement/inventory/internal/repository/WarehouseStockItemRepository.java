@@ -114,4 +114,10 @@ public interface WarehouseStockItemRepository extends JpaRepository<WarehouseSto
             order by p.name asc
             """)
     List<WarehouseStockInfo> findWarehouseStockBelowMinimum();
+
+    @Query("""
+            select coalesce(sum(ws.quantity * ws.product.price), 0)
+            from WarehouseStockItem ws
+            """)
+    java.math.BigDecimal totalStockValue();
 }

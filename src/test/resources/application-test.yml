@@ -1,0 +1,50 @@
+# src/test/resources/application-test.yml
+#
+# Test profile for the tracking module (and any later module that needs real SQL).
+#
+# WHY A REAL POSTGRESQL AND NOT H2
+# The live-map query uses DISTINCT ON, which is PostgreSQL-specific and unimplemented in
+# every embedded database. The dedup tests depend on how TIMESTAMPTZ rounds, and the
+# projection tests depend on how NUMERIC(9,6) binds. Under H2 the interesting half of the
+# suite would either fail for the wrong reason or silently pass against different semantics.
+# Testing against a different database than production is testing a different application.
+#
+# SETUP (no Docker required)
+#   createdb sm_test
+# Flyway migrates it from empty on the first run, so it never needs manual schema work.
+# Use a throwaway database: TrackingServiceTest truncates gps_logs between tests.
+#
+# ALTERNATIVE
+# If Docker is available, Testcontainers is the better answer because it needs no local
+# setup and cannot drift from production's PostgreSQL version:
+#   @Testcontainers + @Container PostgreSQLContainer<>("postgres:16-alpine")
+#   with @ServiceConnection, which wires the datasource with no properties at all.
+#   https://docs.spring.io/spring-boot/reference/testing/testcontainers.html
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sm_test
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Flyway owns the schema, in tests exactly as in production. Letting Hibernate
+      # generate it would test a schema no deployment will ever run, and would quietly
+      # mask a broken migration.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    # Uncomment when a dedup test fails and the reason is not obvious: seeing the actual
+    # bind values is usually enough to spot a precision mismatch.
+    # org.hibernate.orm.jdbc.bind: TRACE
+    org.hibernate.SQL: INFO

@@ -1,0 +1,117 @@
+package com.salesmanagement.routing.internal.repository;
+
+import com.salesmanagement.routing.internal.entity.Route;
+import com.salesmanagement.routing.internal.enums.RouteStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Persistence for {@link Route}. The {@code RouteCustomerAssignment} stops have no
+ * repository of their own — they are managed through the {@code Route} aggregate via
+ * cascade + orphan-removal (same as vanops' order lines).
+ *
+ * <p>Two flavours of read: a paged {@code search} for the management list (no fetch
+ * join — paginating a fetch join would page in memory), and {@code findWithAssignments*}
+ * fetch-join lookups for the single-route reads where the stops are always needed.</p>
+ */
+public interface RouteRepository extends JpaRepository<Route, Long> {
+
+    /**
+     * Paged search with optional filters. A {@code null} filter is ignored.
+     * Stops are loaded lazily when each row is mapped to a response (inside the same tx).
+     */
+    @Query("""
+    select r from Route r
+    where (cast(:representativeId as long)      is null or r.representativeId = :representativeId)
+      and (cast(:status           as string)    is null or r.status           = :status)
+      and (cast(:routeDate        as localdate) is null or r.routeDate        = :routeDate)
+    """)
+    Page<Route> search(@Param("representativeId") Long representativeId,
+                       @Param("status") RouteStatus status,
+                       @Param("routeDate") LocalDate routeDate,
+                       Pageable pageable);
+
+    /** Single route with its stops eagerly fetched. */
+    @Query("select distinct r from Route r left join fetch r.assignments where r.id = :id")
+    Optional<Route> findWithAssignmentsById(@Param("id") Long id);
+
+    /** A rep's route for a given day, stops eagerly fetched. At most one (see the unique constraint). */
+    @Query("""
+            select distinct r from Route r
+            left join fetch r.assignments
+            where r.representativeId = :representativeId
+              and r.routeDate = :routeDate
+            """)
+    Optional<Route> findWithAssignmentsByRepresentativeIdAndRouteDate(
+            @Param("representativeId") Long representativeId,
+            @Param("routeDate") LocalDate routeDate);
+
+    /** One-route-per-rep-per-day guard. */
+    boolean existsByRepresentativeIdAndRouteDate(Long representativeId, LocalDate routeDate);
+
+    /**
+     * Routes with a date strictly before {@code date} whose status is still in the given set.
+     * Used by the nightly sweep to find routes left unfinished (PLANNED or ACTIVE) on past dates.
+     * Stops are eagerly fetched so the sweep can iterate them without a second query per route.
+     */
+    @Query("""
+            select distinct r from Route r
+            left join fetch r.assignments
+            where r.routeDate < :date
+              and r.status in :statuses
+            """)
+    List<Route> findWithAssignmentsByRouteDateBeforeAndStatusIn(
+            @Param("date") LocalDate date,
+            @Param("statuses") Collection<RouteStatus> statuses);
+
+    boolean existsByRepresentativeIdAndRouteDateAndStatusIn(
+            Long representativeId, LocalDate routeDate, java.util.List<RouteStatus> statuses);
+
+
+    @Query("""
+        select r from Route r
+        left join fetch r.assignments
+        where r.representativeId = :representativeId
+          and r.routeDate = :routeDate
+        order by
+          case r.status
+            when com.salesmanagement.routing.internal.enums.RouteStatus.ACTIVE    then 1
+            when com.salesmanagement.routing.internal.enums.RouteStatus.PLANNED   then 2
+            when com.salesmanagement.routing.internal.enums.RouteStatus.COMPLETED then 3
+          end,
+          r.id desc
+        """)
+    java.util.List<Route> findAllWithAssignmentsByRepresentativeIdAndRouteDate(
+            @org.springframework.data.repository.query.Param("representativeId") Long representativeId,
+            @org.springframework.data.repository.query.Param("routeDate")        LocalDate routeDate);
+
+    /**
+     * Routes in the half-open business-date window {@code [from, to)}, optionally scoped to one rep,
+     * with their assignments fetch-joined — backs {@code RoutingFacade.findRoutesInRange} for the
+     * reporting module.
+     *
+     * <p>{@code distinct} because the fetch join on the {@code assignments} bag multiplies rows.
+     * Only ONE collection is fetch-joined (assignments), so no MultipleBagFetchException. The rep
+     * filter uses the same {@code cast(:repId as long)} null-guard as {@code search}, to avoid the
+     * Postgres type-inference error on a nullable typed param.</p>
+     */
+    @Query("""
+            select distinct r from Route r
+            left join fetch r.assignments
+            where r.routeDate >= :from and r.routeDate < :to
+              and (cast(:repId as long) is null or r.representativeId = :repId)
+            order by r.routeDate desc, r.id desc
+            """)
+    List<Route> findWithAssignmentsInRange(@Param("from") LocalDate from,
+                                           @Param("to") LocalDate to,
+                                           @Param("repId") Long repId);
+
+}

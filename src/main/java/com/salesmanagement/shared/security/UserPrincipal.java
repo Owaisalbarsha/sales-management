@@ -17,7 +17,7 @@ import java.util.List;
  *
  * What it carries:
  * - userId  : the USER.UserID PK — the identifier modules use to look up ownership
- * - email   : used as the Spring Security "username" (unique, never null)
+ * - phoneNumber   : used as the Spring Security "username" (unique, never null)
  * - role    : exactly one UserRole — the system has no multi-role users
  * - status  : USER.Status — ACTIVE | INACTIVE | SUSPENDED
  *             The filter checks this on every request; SUSPENDED users are
@@ -34,13 +34,13 @@ import java.util.List;
 public final class UserPrincipal implements UserDetails {
 
     private final Long     userId;
-    private final String   email;
+    private final String   phoneNumber;
     private final UserRole role;
     private final String   status;   // ACTIVE | INACTIVE | SUSPENDED
 
-    public UserPrincipal(Long userId, String email, UserRole role, String status) {
+    public UserPrincipal(Long userId, String phoneNumber, UserRole role, String status) {
         this.userId = userId;
-        this.email  = email;
+        this.phoneNumber  = phoneNumber;
         this.role   = role;
         this.status = status;
     }
@@ -67,11 +67,11 @@ public final class UserPrincipal implements UserDetails {
 
     /**
      * Spring Security uses "username" as the unique identifier.
-     * We use email — it's the natural login identifier in this system.
+     * We use phoneNumber — it's the natural login identifier in this system.
      */
     @Override
     public String getUsername() {
-        return email;
+        return phoneNumber;
     }
 
     /**

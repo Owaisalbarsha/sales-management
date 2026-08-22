@@ -53,3 +53,4 @@ logs/
 # ePOD runtime artifacts (user-captured, not source)
 /epod-storage/
 *.epod
+/epod-uploads/

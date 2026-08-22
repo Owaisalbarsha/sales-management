@@ -1,14 +1,12 @@
 package com.salesmanagement.identity.internal.service;
 
 import com.salesmanagement.identity.api.UserCreatedEvent;
-import com.salesmanagement.identity.internal.controller.AuthController;
+import com.salesmanagement.identity.internal.dto.CreateUserRequest;
 import com.salesmanagement.identity.internal.dto.UserListResponse;
 import com.salesmanagement.identity.internal.dto.UserResponse;
 import com.salesmanagement.identity.internal.dto.UserStatusCounts;
 import com.salesmanagement.identity.internal.entity.User;
 import com.salesmanagement.identity.internal.entity.UserStatus;
-import com.salesmanagement.identity.internal.controller.UserController;
-import com.salesmanagement.identity.internal.dto.CreateUserRequest;
 import com.salesmanagement.identity.internal.repository.UserRepository;
 import com.salesmanagement.shared.api.PageRequest;
 import com.salesmanagement.shared.api.PageResponse;
@@ -25,10 +23,11 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.salesmanagement.shared.security.UserRole;
-import com.salesmanagement.identity.internal.entity.UserStatus;
+
 import java.util.List;
-import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Core business logic for user account management within the {@code identity} module.
@@ -87,14 +86,14 @@ public class UserService implements UserDetailsService {
      * callers from distinguishing "wrong password" from "account suspended",
      * which would leak internal account state.
      *
-     * @param email the login identifier; treated as the Spring Security "username"
+     * @param phoneNumber the login identifier; treated as the Spring Security "username"
      * @return a {@link UserDetails} instance ready for password comparison
-     * @throws UsernameNotFoundException if no active account exists for the given email
+     * @throws UsernameNotFoundException if no active account exists for the given phone number
      */
     @Override
     @Transactional(readOnly = true)
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return userRepository.findByPhoneNumber(email.toLowerCase())
+    public UserDetails loadUserByUsername(String phoneNumber) throws UsernameNotFoundException {
+        return userRepository.findByPhoneNumber(phoneNumber.toLowerCase())
                 .filter(User::canLogin)
                 .map(user -> org.springframework.security.core.userdetails.User
                         .withUsername(user.getPhoneNumber())
@@ -102,7 +101,7 @@ public class UserService implements UserDetailsService {
                         .roles(user.getRole().name())
                         .build())
                 .orElseThrow(() -> new UsernameNotFoundException(
-                        "No active account found for: " + email));
+                        "No active account found for: " + phoneNumber));
     }
 
     // ─── Queries ──────────────────────────────────────────────────────────────
@@ -128,21 +127,21 @@ public class UserService implements UserDetailsService {
     }
 
     /**
-     * Retrieves a user by their email address.
+     * Retrieves a user by their phone number.
      *
-     * <p>Used internally by {@link AuthController} after successful authentication
-     * to load the full {@link User} entity for JWT generation. Email lookup is
-     * always case-insensitive — the value is lowercased before querying.
+     * <p>Used internally by {@link com.salesmanagement.identity.internal.controller.AuthController}
+     * after successful authentication to load the full {@link User} entity for JWT generation.
+     * Lookup is always case-insensitive — the value is lowercased before querying.
      *
-     * @param email the email address to search for
+     * @param phoneNumber the phone number to search for
      * @return the matching {@link User} entity
-     * @throws BusinessException if no user exists with the given email
+     * @throws BusinessException if no user exists with the given phone number
      */
     @Transactional(readOnly = true)
-    public User getByPhoneNumber(String email) {
-        return userRepository.findByPhoneNumber(email.toLowerCase())
+    public User getByPhoneNumber(String phoneNumber) {
+        return userRepository.findByPhoneNumber(phoneNumber.toLowerCase())
                 .orElseThrow(() -> BusinessException.notFound(
-                        "User not found with email: " + email,
+                        "User not found with phone number: " + phoneNumber,
                         "USER_NOT_FOUND"));
     }
 
@@ -181,9 +180,9 @@ public class UserService implements UserDetailsService {
      *
      * <p>The full creation sequence within the transaction:
      * <ol>
-     *   <li>Reject duplicate emails before BCrypt runs — hashing is expensive
+     *   <li>Reject duplicate phone numbers before BCrypt runs — hashing is expensive
      *       by design and should not waste CPU on a request that will fail anyway.</li>
-     *   <li>Lowercase the email for consistent storage and lookup.</li>
+     *   <li>Lowercase the phone number for consistent storage and lookup.</li>
      *   <li>Hash the raw password with BCrypt via {@link PasswordEncoder}.</li>
      *   <li>Persist the entity — new accounts default to {@link UserStatus#ACTIVE}.</li>
      *   <li>Publish {@link UserCreatedEvent} inside the transaction so the Event
@@ -195,16 +194,16 @@ public class UserService implements UserDetailsService {
      * deactivates the old account and creates a new one. This keeps the
      * historical records (visits, invoices) tied to the original role identity.
      *
-     * @param request validated inbound DTO from {@link UserController}
+     * @param request validated inbound DTO from {@code UserController}
      * @return the newly created and persisted {@link User} entity
-     * @throws BusinessException if the email address is already registered
+     * @throws BusinessException if the phone number is already registered
      */
     @Transactional
     public User create(CreateUserRequest request) {
         if (userRepository.existsByPhoneNumber(request.phoneNumber().toLowerCase())) {
             throw BusinessException.conflict(
-                    "Email already in use: " + request.phoneNumber(),
-                    "EMAIL_ALREADY_IN_USE");
+                    "Phone number already in use: " + request.phoneNumber(),
+                    "PHONE_NUMBER_ALREADY_IN_USE");
         }
 
         User user = new User(
@@ -217,12 +216,11 @@ public class UserService implements UserDetailsService {
         User saved = userRepository.save(user);
         log.info("User created: id={}, role={}", saved.getId(), saved.getRole());
 
-        eventPublisher.publishEvent(
-                new UserCreatedEvent(
-                        saved.getId(),
-                        saved.getName(),
-                        saved.getPhoneNumber(),
-                        saved.getRole()));
+        eventPublisher.publishEvent(new UserCreatedEvent(
+                saved.getId(),
+                saved.getName(),
+                saved.getPhoneNumber(),
+                saved.getRole()));
 
         return saved;
     }
@@ -297,14 +295,14 @@ public class UserService implements UserDetailsService {
      * <p>This is the single backing method for the user management screen
      * ({@code GET /api/users}). It performs:
      * <ol>
-     *   <li>A paginated search with optional name/email, role, and status filters.</li>
+     *   <li>A paginated search with optional name/phone number, role, and status filters.</li>
      *   <li>Three global status counts for the dashboard summary cards.</li>
      * </ol>
      *
      * <p>The blank search term is normalised to {@code null} so an empty query
      * string behaves as "no search" rather than matching on an empty pattern.
      *
-     * @param search   optional name/email search term (blank treated as null)
+     * @param search   optional name/phone number search term (blank treated as null)
      * @param role     optional role filter
      * @param status   optional status filter
      * @param pageRequest pagination and sorting parameters from the controller
@@ -330,6 +328,19 @@ public class UserService implements UserDetailsService {
                 userRepository.countByStatus(UserStatus.SUSPENDED));
 
         return new UserListResponse(users, counts);
+    }
+
+    /**
+     * Batch-resolves user names for a set of ids. Returns a map of id → name.
+     * Ids not found in the database are absent from the map (no exception).
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> getNamesByIds(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        return userRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
     }
 
     /** Ids of all ACTIVE users — announcement audience (FR-108). */

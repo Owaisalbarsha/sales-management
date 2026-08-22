@@ -57,7 +57,7 @@ public class UserController {
      *
      * <p>Query parameters (all optional):
      * <ul>
-     *   <li>{@code search}  — partial match on name or email</li>
+     *   <li>{@code search}  — partial match on name or phone number</li>
      *   <li>{@code role}    — filter by exact role</li>
      *   <li>{@code status}  — filter by exact status</li>
      *   <li>{@code page}, {@code size}, {@code sortBy}, {@code sortDir} — pagination</li>
@@ -69,7 +69,7 @@ public class UserController {
      * <p>The response carries the paginated user list plus global status counts
      * for the dashboard summary cards.
      *
-     * @param search      optional name/email search term
+     * @param search      optional name/phone number search term
      * @param role        optional role filter
      * @param status      optional status filter
      * @param pageRequest pagination parameters (bound from query string)
@@ -120,7 +120,7 @@ public class UserController {
      * @param request validated account creation payload
      * @return {@code 201 Created} with the newly created user
      * @throws com.salesmanagement.shared.exception.BusinessException
-     *         {@code 409} if the email address is already registered
+     *         {@code 409} if the phone number is already registered
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")

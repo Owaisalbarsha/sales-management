@@ -1,8 +1,6 @@
 package com.salesmanagement.identity.internal.service;
 
 import com.salesmanagement.identity.internal.controller.AuthController;
-import com.salesmanagement.identity.internal.entity.User;
-import com.salesmanagement.identity.internal.entity.UserStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -42,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * deployment. Production upgrade: Redis with TTL-based expiry.
  *
  * <p><b>No database interaction:</b> this service never touches the
- * {@link User} entity or {@link UserStatus}. Account lockout here is
+ * {@code User} entity or {@code UserStatus}. Account lockout here is
  * transient and separate from the permanent SUSPENDED status that an
  * ADMIN sets via {@code PATCH /api/users/{id}/status}. They are two
  * different concepts — one is automated and temporary, the other is

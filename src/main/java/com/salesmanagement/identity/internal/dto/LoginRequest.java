@@ -1,7 +1,5 @@
 package com.salesmanagement.identity.internal.dto;
 
-import com.salesmanagement.identity.internal.service.UserService;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -10,9 +8,9 @@ import jakarta.validation.constraints.Size;
  * Inbound payload for {@code POST /api/auth/login}.
  *
  * <p>Validation is intentionally minimal here — we do not reveal whether
- * the email exists or the password is wrong beyond a generic "Invalid credentials"
- * message. This prevents user enumeration attacks (if we said "email not found",
- * an attacker learns which emails are registered).
+ * the phone number exists or the password is wrong beyond a generic "Invalid credentials"
+ * message. This prevents user enumeration attacks (if we said "phone number not found",
+ * an attacker learns which phone numbers are registered).
  *
  * <p>Fields are {@code String} (not {@code char[]}) because Spring's
  * {@code HttpMessageConverter} produces Strings. The security gain of

@@ -242,4 +242,32 @@ public class InventoryFacade {
     }
 
 
+
+    /**
+     * Warehouse stock health as three mutually exclusive buckets (see {@link StockHealthSummary}) —
+     * one aggregate query, and the only correct source for a stock-health donut. Do NOT try to derive
+     * "healthy" by subtracting the below-minimum and aging tiles from {@code totalSkus}: those two
+     * overlap, so the subtraction double-counts and the slices stop summing to the total.
+     */
+    @Transactional(readOnly = true)
+    public StockHealthSummary getStockHealth() {
+        return warehouseStockItemRepository.stockHealth();
+    }
+
+    /**
+     * The {@code limit} products carrying the most stock value ({@code onHand × price}), highest
+     * first, ties broken by id. Multiplication, ordering and the cut all happen in the database, so
+     * this returns at most {@code limit} rows however large the catalogue is — no price lookups per
+     * product.
+     *
+     * @param limit how many rows to return; {@code <= 0} yields an empty list
+     */
+    @Transactional(readOnly = true)
+    public List<ProductStockValueInfo> findTopStockValueProducts(int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        return warehouseStockItemRepository.findTopByStockValue(
+                org.springframework.data.domain.PageRequest.of(0, limit));
+    }
 }

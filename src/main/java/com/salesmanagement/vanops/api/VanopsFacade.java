@@ -71,4 +71,32 @@ public class VanopsFacade {
     public List<FulfillmentAggregate> aggregateFulfillment(LocalDate from, LocalDate to) {
         return demandOrderRepository.aggregateFulfillment(from, to, LOADED_ONLY);
     }
+
+    // ── Daily (time-series) shapes for the inventory dashboard ────────────────
+
+    /**
+     * Per-DAY quantity loaded OUT to vans in the window — the outbound series of the movement chart.
+     * Same LOADED-only scope as {@link #aggregateLoadedByProduct}, grouped by date instead of product.
+     * Days with no loading are absent; the caller zero-fills for the chart.
+     */
+    public List<DailyMovementAggregate> aggregateLoadedByDate(LocalDate from, LocalDate to) {
+        return demandOrderRepository.aggregateLoadedByDate(from, to, LOADED_ONLY);
+    }
+
+    /**
+     * Per-DAY quantity returned IN from vans in the window — the inbound series of the movement chart.
+     * Same COMPLETED-only scope as {@link #aggregateReturnedByProduct}, grouped by date.
+     */
+    public List<DailyMovementAggregate> aggregateReturnedByDate(LocalDate from, LocalDate to) {
+        return returnSheetRepository.aggregateReturnedByDate(from, to, COMPLETED_ONLY);
+    }
+
+    /**
+     * Per-DAY requested vs fulfilled in the window — the fill-rate trend. Raw numerator and
+     * denominator per day, never a pre-divided percentage, so the caller can (and must) compute a
+     * weighted rate per bucket rather than averaging per-day percentages.
+     */
+    public List<DailyFulfillmentAggregate> aggregateFulfillmentByDate(LocalDate from, LocalDate to) {
+        return demandOrderRepository.aggregateFulfillmentByDate(from, to, LOADED_ONLY);
+    }
 }

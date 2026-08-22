@@ -170,4 +170,66 @@ public class RouteReportService {
             return UNRESOLVED;
         }
     }
+
+    // ── Window-level roll-up (dashboard) ──────────────────────────────────────
+
+    /**
+     * The whole window's field execution collapsed to one set of counts — the dashboard's route
+     * outcome chart.
+     *
+     * <p><strong>Why it lives here and not in the dashboard service.</strong> The interesting part of
+     * this calculation is not the addition, it is deciding what COMPLETED / MISSED / IN_PROGRESS mean
+     * and how an unmarked planned stop is classified. That judgement already exists in
+     * {@link #routePerformance}, and having a second copy in another service is how two screens end up
+     * disagreeing about the same day. So the semantics stay in one file and this method folds them.</p>
+     *
+     * <p><strong>Why it re-derives instead of summing {@code routePerformance} rows.</strong> That
+     * method resolves a rep name per route — cheap for a report of a few dozen routes, but a
+     * per-route identity lookup the dashboard has no use for at all. This path needs no names, so it
+     * takes the same two batch reads (routes in range, then their visits in one query) and skips the
+     * name resolution entirely: two queries for any window, regardless of how many routes it holds.</p>
+     *
+     * @param range half-open business-date window
+     * @param repId optional rep filter; {@code null} for all reps
+     */
+    public com.salesmanagement.reporting.internal.dto.DashboardAnalyticsDtos.RouteOutcomes routeOutcomes(
+            DateRange range, Long repId) {
+
+        List<RouteInfo> routes = routingFacade.findRoutesInRange(range.from(), range.to(), repId);
+        if (routes.isEmpty()) {
+            return new com.salesmanagement.reporting.internal.dto.DashboardAnalyticsDtos.RouteOutcomes(
+                    0, 0, 0, 0, 0, BigDecimal.ZERO.setScale(1));
+        }
+
+        Map<Long, List<VisitInfo>> visitsByRoute = visitFacade
+                .findVisitsByRouteIds(routes.stream().map(RouteInfo::id).toList())
+                .stream()
+                .collect(Collectors.groupingBy(VisitInfo::routeId));
+
+        long planned = 0, completed = 0, missed = 0, inProgress = 0, notVisited = 0;
+        for (RouteInfo route : routes) {
+            List<VisitInfo> visits = visitsByRoute.getOrDefault(route.id(), List.of());
+            int p = route.stops() == null ? 0 : route.stops().size();
+            int c = (int) visits.stream().filter(v -> "COMPLETED".equals(v.status())).count();
+            int m = (int) visits.stream().filter(v -> "MISSED".equals(v.status())).count();
+            int ip = (int) visits.stream().filter(v -> "IN_PROGRESS".equals(v.status())).count();
+
+            planned += p;
+            completed += c;
+            missed += m;
+            inProgress += ip;
+            // Clamped per route, exactly as routePerformance does: an ad-hoc visit to a customer who
+            // was not a planned stop would otherwise push this negative and make the slices unusable.
+            notVisited += Math.max(0, p - (c + m + ip));
+        }
+
+        BigDecimal completionPercent = planned == 0
+                ? BigDecimal.ZERO.setScale(1)
+                : BigDecimal.valueOf(completed)
+                        .multiply(BigDecimal.valueOf(100))
+                        .divide(BigDecimal.valueOf(planned), 1, RoundingMode.HALF_UP);
+
+        return new com.salesmanagement.reporting.internal.dto.DashboardAnalyticsDtos.RouteOutcomes(
+                planned, completed, missed, inProgress, notVisited, completionPercent);
+    }
 }

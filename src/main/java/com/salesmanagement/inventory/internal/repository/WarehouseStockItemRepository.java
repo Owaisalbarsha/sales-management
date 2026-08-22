@@ -1,5 +1,7 @@
 package com.salesmanagement.inventory.internal.repository;
 
+import com.salesmanagement.inventory.api.ProductStockValueInfo;
+import com.salesmanagement.inventory.api.StockHealthSummary;
 import com.salesmanagement.inventory.api.WarehouseStockInfo;
 import com.salesmanagement.inventory.internal.entity.WarehouseStockItem;
 import org.springframework.data.domain.Page;
@@ -121,4 +123,50 @@ public interface WarehouseStockItemRepository extends JpaRepository<WarehouseSto
             from WarehouseStockItem ws
             """)
     java.math.BigDecimal totalStockValue();
+
+    /**
+     * The three mutually exclusive stock-health buckets in ONE aggregate query
+     * (see {@link StockHealthSummary}). LEFT JOIN from {@code Product} so never-received products are
+     * counted at {@code onHand = 0} — the same population {@link #findAllWarehouseStock()} reports,
+     * which is what keeps {@code totalSkus} consistent between the donut and the KPI tile.
+     *
+     * <p>The three {@code case} arms are written to be disjoint and exhaustive rather than derived
+     * from one another, so the slices provably sum to {@code totalSkus}. Note the {@code > 0} guard on
+     * the healthy arm: without it a product with {@code minStockLevel = 0} and nothing on hand would
+     * be counted both out-of-stock and healthy, and the donut would over-count.</p>
+     */
+    @Query("""
+            select new com.salesmanagement.inventory.api.StockHealthSummary(
+                     count(p),
+                     coalesce(sum(case when coalesce(ws.quantity, 0) = 0 then 1L else 0L end), 0L),
+                     coalesce(sum(case when coalesce(ws.quantity, 0) > 0
+                                        and coalesce(ws.quantity, 0) < p.minStockLevel
+                                       then 1L else 0L end), 0L),
+                     coalesce(sum(case when coalesce(ws.quantity, 0) > 0
+                                        and coalesce(ws.quantity, 0) >= p.minStockLevel
+                                       then 1L else 0L end), 0L))
+            from Product p
+            left join WarehouseStockItem ws on ws.product = p
+            """)
+    StockHealthSummary stockHealth();
+
+    /**
+     * Products ranked by the value of the stock sitting on them (see {@link ProductStockValueInfo}),
+     * highest first. The multiplication, the ordering and the top-N cut all happen in the database —
+     * the caller passes a {@code Pageable} of size N and receives at most N rows, so the cost does not
+     * grow with the catalogue.
+     *
+     * <p>Ties break on {@code p.id} ascending so repeated calls return the same rows in the same
+     * order; a ranking whose order wobbles between refreshes reads as data churn. Rows with no stock
+     * are excluded (zero value, no information).</p>
+     */
+    @Query("""
+            select new com.salesmanagement.inventory.api.ProductStockValueInfo(
+                     p.id, p.name, p.sku, ws.quantity, p.price, ws.quantity * p.price)
+            from WarehouseStockItem ws
+            join ws.product p
+            where ws.quantity > 0
+            order by ws.quantity * p.price desc, p.id asc
+            """)
+    List<ProductStockValueInfo> findTopByStockValue(Pageable pageable);
 }

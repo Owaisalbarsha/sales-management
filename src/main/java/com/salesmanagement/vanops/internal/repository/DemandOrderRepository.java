@@ -1,5 +1,7 @@
 package com.salesmanagement.vanops.internal.repository;
 
+import com.salesmanagement.vanops.api.DailyFulfillmentAggregate;
+import com.salesmanagement.vanops.api.DailyMovementAggregate;
 import com.salesmanagement.vanops.api.FulfillmentAggregate;
 import com.salesmanagement.vanops.api.ProductMovementAggregate;
 import com.salesmanagement.vanops.internal.entity.DemandOrder;
@@ -83,5 +85,48 @@ public interface DemandOrderRepository extends JpaRepository<DemandOrder, Long> 
     List<FulfillmentAggregate> aggregateFulfillment(@Param("from") LocalDate from,
                                                     @Param("to") LocalDate to,
                                                     @Param("statuses") Collection<DemandOrderStatus> statuses);
+
+
+    /**
+     * Per-DAY quantity loaded OUT to vans over a window (see {@link DailyMovementAggregate}) — the
+     * outbound series of the dashboard's movement chart. Same LOADED-only scope and same
+     * {@code fulfilled_qty} measure as {@link #aggregateLoadedByProduct}; only the grouping key
+     * differs (date instead of product). One query for the whole window, ascending.
+     */
+    @Query("""
+            select new com.salesmanagement.vanops.api.DailyMovementAggregate(
+                       d.orderDate, coalesce(sum(l.fulfilledQty), 0))
+            from DemandOrder d
+            join d.lines l
+            where d.orderDate >= :from and d.orderDate < :to
+              and d.status in :statuses
+            group by d.orderDate
+            order by d.orderDate asc
+            """)
+    List<DailyMovementAggregate> aggregateLoadedByDate(@Param("from") LocalDate from,
+                                                       @Param("to") LocalDate to,
+                                                       @Param("statuses") Collection<DemandOrderStatus> statuses);
+
+    /**
+     * Per-DAY requested vs fulfilled over a window (see {@link DailyFulfillmentAggregate}) — the
+     * fill-rate trend. Returns both sums per day so the caller can compute a weighted rate per bucket;
+     * the ratio is deliberately not computed here. Same LOADED-only scope as
+     * {@link #aggregateFulfillment}.
+     */
+    @Query("""
+            select new com.salesmanagement.vanops.api.DailyFulfillmentAggregate(
+                       d.orderDate,
+                       coalesce(sum(l.requestedQty), 0),
+                       coalesce(sum(l.fulfilledQty), 0))
+            from DemandOrder d
+            join d.lines l
+            where d.orderDate >= :from and d.orderDate < :to
+              and d.status in :statuses
+            group by d.orderDate
+            order by d.orderDate asc
+            """)
+    List<DailyFulfillmentAggregate> aggregateFulfillmentByDate(@Param("from") LocalDate from,
+                                                               @Param("to") LocalDate to,
+                                                               @Param("statuses") Collection<DemandOrderStatus> statuses);
 
 }

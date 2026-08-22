@@ -1,6 +1,5 @@
 package com.salesmanagement.identity.internal.dto;
 
-import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.security.UserRole;
 import jakarta.validation.constraints.*;
 
@@ -12,10 +11,10 @@ import jakarta.validation.constraints.*;
  * the system is a closed, company-internal tool with controlled access.
  *
  * <p>The raw {@code password} supplied here is encoded by
- * {@code PasswordEncoder} inside {@link UserService# create}
+ * {@code PasswordEncoder} inside {@code UserService.create}
  * before persisting. It is never stored or logged in plain text.
  *
- * <p>Email is stored lowercased to guarantee case-insensitive uniqueness
+ * <p>Phone number is stored lowercased to guarantee case-insensitive uniqueness
  * (enforced at the application layer; the database unique constraint is
  * case-sensitive by default in PostgreSQL).
  */

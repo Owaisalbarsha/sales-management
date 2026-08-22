@@ -1,6 +1,5 @@
 package com.salesmanagement.identity.internal.entity;
 
-import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.shared.domain.BaseEntity;
 import com.salesmanagement.shared.security.UserRole;
 import jakarta.persistence.*;
@@ -18,7 +17,7 @@ import lombok.*;
  * Status lifecycle is managed by {@link UserStatus}.
  *
  * <p>Password is never stored in plain text. The field holds a BCrypt hash
- * produced by {@code PasswordEncoder} in {@link UserService}. It is excluded
+ * produced by {@code PasswordEncoder} in {@code UserService}. It is excluded
  * from {@code toString()} and {@code equals/hashCode} deliberately.
  */
 @Entity
@@ -76,7 +75,7 @@ public class User extends BaseEntity {
      * reach this constructor.
      *
      * @param name         full display name
-     * @param phoneNumber;        unique login email (lowercased by caller)
+     * @param phoneNumber  unique login phone number (lowercased by caller)
      * @param passwordHash BCrypt hash produced by {@code PasswordEncoder}
      * @param role         assigned role from the fixed role set
      */

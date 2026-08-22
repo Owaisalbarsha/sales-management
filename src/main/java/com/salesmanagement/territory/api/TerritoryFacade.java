@@ -6,7 +6,10 @@ import com.salesmanagement.territory.internal.repository.TerritoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 /**
  * Public API surface of the territory module — the only type other modules may
  * import from territory. Mirrors {@code UserFacade}.
@@ -49,4 +52,33 @@ public class TerritoryFacade {
     public boolean exists(Long territoryId) {
         return territoryRepository.existsById(territoryId);
     }
+
+    /**
+     * Batch-resolves territory ids to names in ONE query — used by the reporting module to label
+     * territory-grouped reports without a per-row lookup. Ids with no matching territory are absent
+     * from the map.
+     *
+     * @param territoryIds the ids to resolve
+     * @return id → name for every id that exists; empty map if {@code territoryIds} is empty
+     */
+    public Map<Long, String> getNamesByIds(Collection<Long> territoryIds) {
+        if (territoryIds == null || territoryIds.isEmpty()) {
+            return Map.of();
+        }
+        return territoryRepository.findAllById(territoryIds).stream()
+                .collect(Collectors.toMap(Territory::getId, Territory::getName));
+    }
+
+    /**
+     * All territories as public projections — used by the customers-per-territory report so that a
+     * territory with zero customers still appears (a left-join view). Ordered by name.
+     */
+    public List<TerritoryInfo> getAllTerritories() {
+        return territoryRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(Territory::getName,
+                        java.util.Comparator.nullsLast(String::compareTo)))
+                .map(t -> new TerritoryInfo(t.getId(), t.getName(), t.getDescription()))
+                .toList();
+    }
+
 }

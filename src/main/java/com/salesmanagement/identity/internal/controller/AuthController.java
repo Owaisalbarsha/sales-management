@@ -82,7 +82,7 @@ public class AuthController {
      * identity fields so the client can bootstrap its UI without a second request.
      *
      * <p>Both wrong-password and inactive-account failures surface as the same
-     * generic message — "Invalid email or password" — to prevent user enumeration.
+     * generic message — "Invalid phone number or password" — to prevent user enumeration.
      * {@link UserService#loadUserByUsername} enforces this by throwing
      * {@link org.springframework.security.core.userdetails.UsernameNotFoundException}
      * for all negative cases regardless of their specific cause.
@@ -114,7 +114,7 @@ public class AuthController {
             // ── Record the failure ──────────────────────────────────────
             loginAttemptService.recordFailure(request.phoneNumber());
             throw BusinessException.badRequest(
-                    "Invalid email or password",
+                    "Invalid phone number or password",
                     "INVALID_CREDENTIALS");
         }
 

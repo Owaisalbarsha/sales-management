@@ -158,4 +158,19 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
                                        @Param("to") LocalDate to,
                                        @Param("representativeId") Long representativeId,
                                        @Param("customerId") Long customerId);
+
+    /**
+     * Last realised invoice date per customer - backs the dormant-customers report. Returns rows of
+     * [customerId (Long), maxInvoiceDate (LocalDate)] across invoices whose status is in
+     * :statuses (the facade passes {SENT, APPROVED}: a dormant check ignores drafts and rejected
+     * sales). A customer who never had a realised invoice does not appear - the reporting side treats
+     * absence as "never purchased", the strongest dormancy signal.
+     */
+    @Query("""
+            select i.customerId, max(i.invoiceDate)
+            from Invoice i
+            where i.status in :statuses
+            group by i.customerId
+            """)
+    List<Object[]> findLastInvoiceDatePerCustomer(@Param("statuses") Collection<InvoiceStatus> statuses);
 }

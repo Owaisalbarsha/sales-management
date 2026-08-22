@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import com.salesmanagement.reporting.internal.dto.SalesReportDtos.RepProductivityRow;
 import java.time.LocalDate;
 
 /**
@@ -76,5 +76,22 @@ public class SalesReportController {
         }
         return responseFactory.file(fmt, "invoice-list",
                 () -> salesReportService.invoiceListTable(range, representativeId, customerId));
+    }
+
+    /** Rep productivity: sales + visit completion per rep over a window. */
+    @GetMapping("/rep-productivity")
+    public ResponseEntity<?> repProductivity(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String format) {
+
+        DateRange range = DateRangeResolver.resolve(from, to);
+        Format fmt = responseFactory.parse(format);
+        if (fmt == Format.JSON) {
+            return ResponseEntity.ok(ApiResponse.ok(new ReportEnvelope<RepProductivityRow>(
+                    range.from(), range.to(), salesReportService.repProductivity(range))));
+        }
+        return responseFactory.file(fmt, "rep-productivity",
+                () -> salesReportService.repProductivityTable(range));
     }
 }

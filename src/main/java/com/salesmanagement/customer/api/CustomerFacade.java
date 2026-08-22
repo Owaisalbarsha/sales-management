@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -108,5 +109,51 @@ public class CustomerFacade {
         }
         return customerRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Customer::getId, Customer::getName));
+    }
+
+    /**
+     * Batch-resolves customer ids to their owning territory ids in ONE query — the map the reporting
+     * module uses to regroup customer-level sales into territory-level sales (invoices carry customerId,
+     * not territoryId, so the report resolves the link here). Ids with no matching customer are absent.
+     *
+     * @param customerIds the ids to resolve
+     * @return customerId → territoryId for every id that exists; empty map if input is empty
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> getTerritoryIdsByIds(Collection<Long> customerIds) {
+        if (customerIds == null || customerIds.isEmpty()) {
+            return Map.of();
+        }
+        return customerRepository.findAllById(customerIds).stream()
+                .collect(Collectors.toMap(Customer::getId, Customer::getTerritoryId));
+    }
+
+    /**
+     * Count of ACTIVE customers per territory, computed in ONE grouped query — backs the
+     * customers-per-territory report. Territories with zero active customers are absent from this map;
+     * the report supplies them as zero by starting from the full territory list.
+     *
+     * @return territoryId → active-customer count
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> countActiveCustomersByTerritory() {
+        return customerRepository.countActiveByTerritory(CustomerStatus.ACTIVE).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (Long) row[1]));
+    }
+
+    /**
+     * All ACTIVE customers as (id, name, territoryId) — used by the dormant-customers report, which
+     * must start from every active customer (including those who have never invoiced) and then subtract
+     * the recently-active ones. Ordered by name.
+     */
+    @Transactional(readOnly = true)
+    public List<CustomerBasicInfo> getActiveCustomers() {
+        return customerRepository.findByStatus(CustomerStatus.ACTIVE).stream()
+                .map(c -> new CustomerBasicInfo(c.getId(), c.getName(), c.getTerritoryId()))
+                .sorted(java.util.Comparator.comparing(CustomerBasicInfo::name,
+                        java.util.Comparator.nullsLast(String::compareTo)))
+                .toList();
     }
 }

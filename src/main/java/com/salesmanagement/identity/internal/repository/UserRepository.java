@@ -1,7 +1,6 @@
 package com.salesmanagement.identity.internal.repository;
 
 import com.salesmanagement.identity.internal.entity.User;
-import com.salesmanagement.identity.internal.service.UserService;
 import com.salesmanagement.identity.internal.entity.UserStatus;
 import com.salesmanagement.shared.security.UserRole;
 import org.springframework.data.domain.Page;
@@ -9,11 +8,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import com.salesmanagement.identity.internal.entity.UserStatus;
-import com.salesmanagement.shared.security.UserRole;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-import java.util.List;
 
 import java.util.List;
 import java.util.Optional;
@@ -29,7 +23,7 @@ import java.util.Optional;
  * <p><b>Visibility:</b> package-private by design. Nothing outside
  * {@code identity/internal} may reference this interface, not even other
  * classes within the identity module's {@code api} package. All data access
- * is funnelled through {@link UserService}, which is the only class that
+ * is funnelled through {@code UserService}, which is the only class that
  * holds a reference to this repository.
  *
  * <p><b>Naming convention:</b> Spring Data derives the query from the method
@@ -45,32 +39,30 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     /**
-     * Looks up a user by their email address.
+     * Looks up a user by their phone number.
      *
-     * <p>Email is the system's unique login identifier. The value stored in
+     * <p>Phone number is the system's unique login identifier. The value stored in
      * the database is always lowercase — callers must lowercase the input
-     * before invoking this method. {@link UserService} enforces this contract.
+     * before invoking this method. {@link com.salesmanagement.identity.internal.service.UserService}
+     * enforces this contract.
      *
      * <p>Returns an {@link Optional} rather than {@code null} or throwing an
      * exception — the repository layer does not decide what a missing record means.
-     * That decision (throw {@link com.salesmanagement.shared.exception.BusinessException},
-     * return a default, etc.) belongs to the service layer.
-     *
+     * That decision belongs to the service layer.
      *
      * @return an {@link Optional} containing the user if found, empty otherwise
      */
     Optional<User> findByPhoneNumber(String phoneNumber);
 
     /**
-     * Checks whether any user account is already registered with the given email.
+     * Checks whether any user account is already registered with the given phone number.
      *
-     * <p>Used exclusively in {@link UserService# create} to reject duplicate
+     * <p>Used exclusively in {@code UserService.create} to reject duplicate
      * registrations before the expensive BCrypt hash computation runs.
-     * Prefer this over {@code findByEmail(...).isPresent()} — it issues a
+     * Prefer this over {@code findByPhoneNumber(...).isPresent()} — it issues a
      * {@code SELECT 1} existence check instead of loading the full entity.
      *
-     *
-     * @return {@code true} if an account with this email exists, {@code false} otherwise
+     * @return {@code true} if an account with this phone number exists, {@code false} otherwise
      */
     boolean existsByPhoneNumber(String phoneNumber);
 
@@ -107,13 +99,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * optional filters: {@code (:param IS NULL OR column = :param)}.
      *
      * <ul>
-     *   <li>{@code search} — matches against name OR email, case-insensitive,
+     *   <li>{@code search} — matches against name OR phone number, case-insensitive,
      *       partial match. {@code null} or blank returns all.</li>
      *   <li>{@code role}   — exact role match. {@code null} returns all roles.</li>
      *   <li>{@code status} — exact status match. {@code null} returns all statuses.</li>
      * </ul>
      *
-     * @param search partial name/email search term, or {@code null}
+     * @param search partial name/phone number search term, or {@code null}
      * @param role   role filter, or {@code null} for all
      * @param status status filter, or {@code null} for all
      * @param pageable pagination and sorting

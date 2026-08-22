@@ -29,7 +29,7 @@ import java.util.UUID;
  * <p><b>Token types:</b> two distinct JWTs are issued per session.
  * <ul>
  *   <li><b>Access token</b> — short-lived (default 15 min), sent on every API request
- *       in the {@code Authorization: Bearer} header. Contains userId, email, role,
+ *       in the {@code Authorization: Bearer} header. Contains userId, phone number, role,
  *       status, and a unique {@code jti} so {@code JwtAuthFilter} can reconstruct
  *       {@link com.salesmanagement.shared.security.UserPrincipal} and check the
  *       blacklist without a database round-trip.</li>
@@ -92,7 +92,7 @@ public class JwtService implements JwtTokenValidator {
      * <p>The token payload includes:
      * <ul>
      *   <li>{@code jti}    — UUID, unique per token; used as the blacklist key</li>
-     *   <li>{@code sub}    — the user's email (standard JWT subject claim)</li>
+     *   <li>{@code sub}    — the user's phone number (standard JWT subject claim)</li>
      *   <li>{@code userId} — database primary key; read by {@code JwtAuthFilter}
      *                        to build {@link com.salesmanagement.shared.security.UserPrincipal}
      *                        without a database query</li>

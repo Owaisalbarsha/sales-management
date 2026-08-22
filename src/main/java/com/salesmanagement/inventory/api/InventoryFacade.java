@@ -5,8 +5,10 @@ import com.salesmanagement.inventory.internal.enums.ProductStatus;
 import com.salesmanagement.inventory.internal.repository.ProductRepository;
 import com.salesmanagement.inventory.internal.service.StockCountService;
 import com.salesmanagement.inventory.internal.service.StockService;
+import com.salesmanagement.inventory.internal.repository.WarehouseStockItemRepository;
 import com.salesmanagement.shared.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +37,7 @@ public class InventoryFacade {
     private final ProductRepository productRepository;
     private final StockService stockService;
     private final StockCountService stockCountService;
-
+    private final WarehouseStockItemRepository warehouseStockItemRepository;
     // ── Product reads (used by invoicing, vanops) ────────────────────────────
 
     /**
@@ -227,4 +229,17 @@ public class InventoryFacade {
     public List<StockCountSummaryInfo> getStockCounts() {
         return stockCountService.listSummaries();
     }
+
+    /**
+     * Total warehouse stock value: sum over all warehouse rows of (quantity * product price). Computed
+     * in one query in the database. Used by the inventory dashboard's stock-value tile. Zero if the
+     * warehouse is empty.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal getTotalStockValue() {
+        BigDecimal v = warehouseStockItemRepository.totalStockValue();
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+
 }

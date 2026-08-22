@@ -90,12 +90,13 @@ public interface WarehouseStockItemRepository extends JpaRepository<WarehouseSto
                      p.id, p.name, p.sku,
                      coalesce(ws.quantity, 0),
                      p.minStockLevel,
-                     coalesce(ws.quantity, 0) < p.minStockLevel)
+                     case when coalesce(ws.quantity, 0) < p.minStockLevel then true else false end)
             from Product p
             left join WarehouseStockItem ws on ws.product = p
             order by p.name asc
             """)
     List<WarehouseStockInfo> findAllWarehouseStock();
+
 
     /**
      * Only the products currently below minimum — FR-121 (low-stock / reorder list). Same shape as
@@ -114,4 +115,10 @@ public interface WarehouseStockItemRepository extends JpaRepository<WarehouseSto
             order by p.name asc
             """)
     List<WarehouseStockInfo> findWarehouseStockBelowMinimum();
+
+    @Query("""
+            select coalesce(sum(ws.quantity * ws.product.price), 0)
+            from WarehouseStockItem ws
+            """)
+    java.math.BigDecimal totalStockValue();
 }

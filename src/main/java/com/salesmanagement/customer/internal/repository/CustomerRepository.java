@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 /**
  * Spring Data repository for {@link Customer}.
  *
@@ -43,4 +45,23 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
                           @Param("status") CustomerStatus status,
                           @Param("q") String q,
                           Pageable pageable);
+
+    /**
+     * Active-customer count grouped by territory, in one query. Returns rows of
+     * {@code [territoryId (Long), count (Long)]}; the facade maps them to a Map. Only the given status
+     * is counted (the facade passes ACTIVE). Territories with no active customer simply do not appear.
+     */
+    @Query("""
+            select c.territoryId, count(c)
+            from Customer c
+            where c.status = :status
+            group by c.territoryId
+            """)
+    List<Object[]> countActiveByTerritory(@Param("status") CustomerStatus status);
+
+    /**
+     * All customers in a given status — used by the dormant-customers report to enumerate every active
+     * customer. Derived query; Spring Data generates {@code where status = ?}.
+     */
+    List<Customer> findByStatus(CustomerStatus status);
 }

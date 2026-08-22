@@ -83,4 +83,19 @@ public final class SalesReportDtos {
             LocalDate to,
             List<T>   rows
     ) {}
+
+    /**
+     * Rep productivity: sales side (count, total, avg invoice value) + field side (planned stops,
+     * completed visits, completion %). One row per rep active in the window.
+     */
+    public record RepProductivityRow(
+            Long       representativeId,
+            String     representativeName,
+            long       invoiceCount,
+            BigDecimal totalSales,
+            BigDecimal avgInvoiceValue,
+            int        plannedStops,
+            int        completedVisits,
+            BigDecimal visitCompletionPercent
+    ) {}
 }

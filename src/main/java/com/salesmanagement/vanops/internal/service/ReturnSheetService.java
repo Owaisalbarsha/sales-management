@@ -141,6 +141,12 @@ public class ReturnSheetService {
         return toResponse(saved);
     }
 
+    @Transactional
+    public ReturnSheetResponse autoComplete(Long representativeId) {
+        ReturnSheetResponse draft = autoCreate(representativeId); // validates rep + builds lines
+        return complete(draft.id());                              // moves stock, flips to COMPLETED
+    }
+
     public ReturnSheetResponse getById(Long id) {
         return toResponse(findWithLinesOrThrow(id));
     }

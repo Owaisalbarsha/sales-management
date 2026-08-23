@@ -70,7 +70,7 @@ import java.util.Set;
  * {@code demo-…} key, which the schema already constrains to be unique.</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

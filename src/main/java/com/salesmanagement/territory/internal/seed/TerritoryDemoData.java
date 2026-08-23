@@ -29,7 +29,7 @@ import java.util.List;
  * as they are rather than duplicated under a second id.</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

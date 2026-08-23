@@ -43,7 +43,7 @@ spring:
     # db/seeder provides the demo users (ids 1-11) that TrackingServiceTest and others assume
     # already exist (gps_logs.representative_id is FK-constrained to users). Matches production's
     # spring.flyway.locations so a freshly created sm_test database needs no manual seeding.
-    locations: classpath:db/migration,classpath:db/seeder
+    #locations: classpath:db/migration,classpath:db/seeder
 
 logging:
   level:

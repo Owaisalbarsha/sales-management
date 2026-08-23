@@ -55,7 +55,7 @@ import java.util.Random;
  * are held deep and cheap, specialty lines shallow and dear.
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

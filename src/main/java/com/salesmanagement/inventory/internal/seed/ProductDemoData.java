@@ -43,7 +43,7 @@ import java.util.Map;
  * <p>Idempotent on SKU, the schema's unique business key for a product.</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

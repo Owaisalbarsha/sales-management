@@ -47,8 +47,7 @@ public interface DemoDataContributor {
      * not need them gone — and deleting them would take real referencing data with them. Only
      * contributors that generate dated operational documents override this.</p>
      *
-     * <p>Reached only when the {@code local}/{@code dev} profile AND {@code app.seed.reset=true} are
-     * both present; see {@code DemoDataSeeder}.</p>
+     * <p>Reached only when {@code app.seed.reset=true}; see {@code DemoDataSeeder}.</p>
      */
     default void resetSeededData(SeedContext context) {
         // no-op: most contributors are check-before-create and need no teardown

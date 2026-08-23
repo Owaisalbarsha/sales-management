@@ -50,7 +50,7 @@ import java.util.Random;
  * that pair identifies a seeded route even though the schema no longer constrains it.</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

@@ -57,7 +57,7 @@ import java.util.Set;
  * <p>Idempotent on (representative, order date) and (representative, return date).</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

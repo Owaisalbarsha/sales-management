@@ -39,7 +39,7 @@ import java.util.Random;
  * the Gulf of Guinea and quietly break any distance calculation.</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

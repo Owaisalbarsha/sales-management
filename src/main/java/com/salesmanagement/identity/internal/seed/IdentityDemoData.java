@@ -35,7 +35,7 @@ import java.util.List;
  * credential for a database that only ever holds fabricated data; it is never logged here.</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

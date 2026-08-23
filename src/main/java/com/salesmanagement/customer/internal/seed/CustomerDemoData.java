@@ -47,7 +47,7 @@ import java.util.Random;
  * the business key (the schema does not constrain it, so the lookup is explicit).</p>
  */
 @Component
-@Profile({"local", "dev"})
+@Profile("!test")
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

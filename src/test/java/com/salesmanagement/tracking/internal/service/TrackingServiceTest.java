@@ -2,6 +2,7 @@ package com.salesmanagement.tracking.internal.service;
 
 import com.salesmanagement.identity.api.UserFacade;
 import com.salesmanagement.shared.exception.BusinessException;
+import com.salesmanagement.systemconfig.api.ConfigFacade;
 import com.salesmanagement.tracking.api.GpsPointInput;
 import com.salesmanagement.tracking.api.IngestResult;
 import com.salesmanagement.tracking.internal.dto.GpsPointResponse;
@@ -26,7 +27,9 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 
 /**
@@ -64,12 +67,15 @@ class TrackingServiceTest {
     @Autowired GpsLogRepository gpsLogRepository;
 
     @MockitoBean UserFacade userFacade;
+    @MockitoBean ConfigFacade configFacade;
 
     @BeforeEach
     void setUp() {
         gpsLogRepository.deleteAll();
         given(userFacade.isActive(anyLong())).willReturn(true);
         given(userFacade.getNameById(anyLong())).willReturn("Test Rep");
+        // No override configured — mirrors ConfigFacade's real fallback behaviour.
+        given(configFacade.getInt(anyString(), anyInt())).willAnswer(inv -> inv.getArgument(1));
     }
 
     // ═══════════════════════════════════════════════════════════════════════

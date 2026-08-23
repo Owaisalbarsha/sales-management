@@ -53,24 +53,29 @@ public class IdentityDemoData implements DemoDataContributor {
      */
     private record StaffSpec(String name, String phone, UserRole role, int salesWeight) {}
 
+    /**
+     * Phone numbers use the local Syrian mobile format the staff actually type when they log in —
+     * {@code 09XXXXXXXX} — rather than the {@code +963} international form. The login identifier is
+     * matched verbatim, so the seeded value has to be the one a person would enter.
+     */
     private static final List<StaffSpec> STAFF = List.of(
-            new StaffSpec("أويس البرشة",     "+963981491713", UserRole.ADMIN, 0),
+            new StaffSpec("أويس البرشة",     "0981491713", UserRole.ADMIN, 0),
 
-            new StaffSpec("أحمد الحسن",      "+963991000002", UserRole.SALES_MANAGER, 0),
-            new StaffSpec("حسام رقية",       "+963991000003", UserRole.SALES_MANAGER, 0),
+            new StaffSpec("أحمد الحسن",      "0991000002", UserRole.SALES_MANAGER, 0),
+            new StaffSpec("حسام رقية",       "0991000003", UserRole.SALES_MANAGER, 0),
 
             // Eight reps, weights spread wide enough that the bar chart has a clear shape.
-            new StaffSpec("شادي حمزة",       "+963991000005", UserRole.SALES_REP, 100),
-            new StaffSpec("رامي صالح",       "+963991000007", UserRole.SALES_REP, 88),
-            new StaffSpec("خالد حاج عثمان",  "+963991000004", UserRole.SALES_REP, 76),
-            new StaffSpec("عمر بكري",        "+963991000006", UserRole.SALES_REP, 64),
-            new StaffSpec("يزن الحسن",       "+963991000012", UserRole.SALES_REP, 55),
-            new StaffSpec("سامر العلي",      "+963991000013", UserRole.SALES_REP, 44),
-            new StaffSpec("فادي ناصر",       "+963991000008", UserRole.SALES_REP, 33),
-            new StaffSpec("مازن خوري",       "+963991000009", UserRole.SALES_REP, 24),
+            new StaffSpec("شادي حمزة",       "0991000005", UserRole.SALES_REP, 100),
+            new StaffSpec("رامي صالح",       "0991000007", UserRole.SALES_REP, 88),
+            new StaffSpec("خالد حاج عثمان",  "0991000004", UserRole.SALES_REP, 76),
+            new StaffSpec("عمر بكري",        "0991000006", UserRole.SALES_REP, 64),
+            new StaffSpec("يزن الحسن",       "0991000012", UserRole.SALES_REP, 55),
+            new StaffSpec("سامر العلي",      "0991000013", UserRole.SALES_REP, 44),
+            new StaffSpec("فادي ناصر",       "0991000008", UserRole.SALES_REP, 33),
+            new StaffSpec("مازن خوري",       "0991000009", UserRole.SALES_REP, 24),
 
-            new StaffSpec("بلال المستودع",   "+963991000010", UserRole.WAREHOUSE_MANAGER, 0),
-            new StaffSpec("نور المستودع",    "+963991000011", UserRole.WAREHOUSE_MANAGER, 0)
+            new StaffSpec("بلال المستودع",   "0991000010", UserRole.WAREHOUSE_MANAGER, 0),
+            new StaffSpec("نور المستودع",    "0991000011", UserRole.WAREHOUSE_MANAGER, 0)
     );
 
     @Override

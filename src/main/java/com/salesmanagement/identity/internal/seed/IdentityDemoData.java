@@ -31,9 +31,8 @@ import java.util.List;
  * fires exactly as it would for a real hire. Idempotent by phone number, which is this module's
  * natural business key and its login identifier.</p>
  *
- * <p>All accounts share the repository's existing local demo password convention (documented in
- * {@code db/seeder/R__seed_demo_data.sql}). It is a development credential for a database that only
- * ever holds fabricated data; it is never logged here.</p>
+ * <p>All accounts share the same local demo password ({@link #DEMO_PASSWORD}). It is a development
+ * credential for a database that only ever holds fabricated data; it is never logged here.</p>
  */
 @Component
 @Profile({"local", "dev"})

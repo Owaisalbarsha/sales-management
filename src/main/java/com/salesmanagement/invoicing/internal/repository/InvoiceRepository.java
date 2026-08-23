@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import com.salesmanagement.invoicing.api.CustomerPurchaseAggregate;
+import com.salesmanagement.invoicing.api.DailySalesAggregate;
+import com.salesmanagement.invoicing.api.DailyUnitsSoldAggregate;
+import com.salesmanagement.invoicing.api.InvoiceStatusCount;
 import com.salesmanagement.invoicing.api.InvoiceSummary;
 import com.salesmanagement.invoicing.api.ProductSalesAggregate;
 import com.salesmanagement.invoicing.api.RepSalesAggregate;
@@ -166,6 +169,61 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
      * sales). A customer who never had a realised invoice does not appear - the reporting side treats
      * absence as "never purchased", the strongest dormancy signal.
      */
+    /**
+     * Per-day realised-sales rollup for the dashboard sales trend (see {@link DailySalesAggregate}).
+     * ONE {@code group by} over the whole window returns one row per day that had sales — the caller
+     * never loops over dates. Ordered ascending so the trend arrives already chart-ready; the
+     * zero-filling of silent days happens in memory upstream, not by inventing rows here.
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.DailySalesAggregate(
+                       i.invoiceDate, count(i), coalesce(sum(i.totalAmount), 0))
+            from Invoice i
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+              and i.status in :statuses
+            group by i.invoiceDate
+            order by i.invoiceDate asc
+            """)
+    List<DailySalesAggregate> aggregateDailySales(@Param("from") LocalDate from,
+                                                  @Param("to") LocalDate to,
+                                                  @Param("statuses") Collection<InvoiceStatus> statuses);
+
+    /**
+     * Per-day units sold across realised invoice lines (see {@link DailyUnitsSoldAggregate}) — the
+     * sold series of the inventory movement chart. Joins the aggregate root's {@code lines}
+     * association and groups by the invoice's business date; one query per window.
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.DailyUnitsSoldAggregate(
+                       i.invoiceDate, coalesce(sum(li.quantity), 0))
+            from Invoice i
+            join i.lines li
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+              and i.status in :statuses
+            group by i.invoiceDate
+            order by i.invoiceDate asc
+            """)
+    List<DailyUnitsSoldAggregate> aggregateDailyUnitsSold(@Param("from") LocalDate from,
+                                                          @Param("to") LocalDate to,
+                                                          @Param("statuses") Collection<InvoiceStatus> statuses);
+
+    /**
+     * Invoice count per status over the window (see {@link InvoiceStatusCount}) — ALL statuses, not
+     * just the realised ones, because the donut it feeds is about workflow state, not revenue. A
+     * single {@code group by i.status}: counting statuses must never mean loading invoices. Statuses
+     * with no invoices in the window are absent here and zero-filled by the facade, which owns the
+     * enum and therefore the full status set.
+     */
+    @Query("""
+            select new com.salesmanagement.invoicing.api.InvoiceStatusCount(
+                       str(i.status), count(i))
+            from Invoice i
+            where i.invoiceDate >= :from and i.invoiceDate < :to
+            group by i.status
+            """)
+    List<InvoiceStatusCount> countByStatus(@Param("from") LocalDate from,
+                                           @Param("to") LocalDate to);
+
     @Query("""
             select i.customerId, max(i.invoiceDate)
             from Invoice i

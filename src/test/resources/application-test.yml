@@ -25,7 +25,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/sm_test
     username: postgres
-    password: postgres
+    password: PostgreSQL
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -48,3 +48,17 @@ logging:
     # bind values is usually enough to spot a precision mismatch.
     # org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.SQL: INFO
+
+# The JWT filter reads jwt.secret at bean-creation time, so ANY @SpringBootTest fails to start a
+# context without one — including tests that never authenticate. Production takes it from the
+# JWT_SECRET environment variable; a test must not depend on a developer's shell, so a fixed
+# throwaway key lives here. It is a test key by construction: it signs nothing that leaves the
+# suite, and it is deliberately not the value any deployment uses.
+jwt:
+  secret: test-only-secret-not-used-anywhere-else-32b+
+
+# Firebase push is off in tests: enabling it would have the context reach for a service-account
+# JSON on the developer's disk and fail everywhere it is absent.
+notification:
+  fcm:
+    enabled: false

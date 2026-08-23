@@ -114,6 +114,45 @@ public class InvoiceFacade {
     }
 
     /**
+     * Per-day realised-sales rollup for the dashboard's sales-trend chart. One row per day that had
+     * realised sales, ascending; days with no sales are absent (the caller zero-fills for the chart —
+     * inventing rows here would put fiction in the aggregate).
+     *
+     * <p>Same {SENT, APPROVED} filter as the other sales aggregates, so a trend and a ranking over
+     * the same window sum to the same total.</p>
+     */
+    public List<DailySalesAggregate> aggregateDailySales(LocalDate from, LocalDate to) {
+        return invoiceRepository.aggregateDailySales(from, to, REALISED_SALES);
+    }
+
+    /**
+     * Per-day units sold across realised invoice lines — the "sold" component of the dashboard's
+     * inventory movement chart, in the same daily shape vanops publishes its two components in.
+     */
+    public List<DailyUnitsSoldAggregate> aggregateDailyUnitsSold(LocalDate from, LocalDate to) {
+        return invoiceRepository.aggregateDailyUnitsSold(from, to, REALISED_SALES);
+    }
+
+    /**
+     * Invoice count per status over the window — the one read here that is deliberately NOT limited
+     * to realised sales, because its consumer (the status donut) is asking about workflow state, not
+     * revenue: DRAFT and REJECTED are the slices worth seeing.
+     *
+     * <p>Returns one row for EVERY declared status, zero-filled, in lifecycle order
+     * (DRAFT → SENT → APPROVED → REJECTED). Reporting cannot enumerate the statuses itself — the
+     * enum is internal — so the completeness and the ordering belong here, and a donut built on this
+     * keeps the same slices between refreshes instead of having categories appear and vanish.</p>
+     */
+    public List<InvoiceStatusCount> countByStatus(LocalDate from, LocalDate to) {
+        Map<String, Long> found = invoiceRepository.countByStatus(from, to).stream()
+                .collect(Collectors.toMap(InvoiceStatusCount::status, InvoiceStatusCount::count));
+
+        return java.util.Arrays.stream(InvoiceStatus.values())
+                .map(st -> new InvoiceStatusCount(st.name(), found.getOrDefault(st.name(), 0L)))
+                .toList();
+    }
+
+    /**
      * Last realised-invoice date per customer — the map the dormant-customers report uses to decide who
      * has gone quiet. Only {SENT, APPROVED} count (same realised-sales filter as the aggregates). A
      * customer absent from the map has never had a realised invoice; the report treats that as the

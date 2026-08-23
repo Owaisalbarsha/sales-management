@@ -84,4 +84,16 @@ public class ReturnSheetController {
         return ApiResponse.ok(
                 returnSheetService.list(representativeId, status, returnDate, pageRequest.toPageable()));
     }
+
+    /**
+     * Rep empties their own van in one action: reads the van, moves all stock back to the
+     * warehouse, returns the COMPLETED sheet. SALES_REP (own van only), ADMIN, WAREHOUSE_MANAGER.
+     */
+    @PostMapping("/auto-complete")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN', 'WAREHOUSE_MANAGER') "
+            + "or #representativeId == authentication.principal.userId")
+    public ApiResponse<ReturnSheetResponse> autoComplete(@RequestParam Long representativeId) {
+        return ApiResponse.created(returnSheetService.autoComplete(representativeId));
+    }
 }

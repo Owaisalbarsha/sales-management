@@ -1,5 +1,6 @@
 package com.salesmanagement.vanops.internal.repository;
 
+import com.salesmanagement.vanops.api.DailyMovementAggregate;
 import com.salesmanagement.vanops.api.ProductMovementAggregate;
 import com.salesmanagement.vanops.internal.entity.ReturnSheet;
 import com.salesmanagement.vanops.internal.enums.ReturnSheetStatus;
@@ -54,4 +55,25 @@ public interface ReturnSheetRepository extends JpaRepository<ReturnSheet, Long> 
     List<ProductMovementAggregate> aggregateReturnedByProduct(@Param("from") LocalDate from,
                                                               @Param("to") LocalDate to,
                                                               @Param("statuses") Collection<ReturnSheetStatus> statuses);
+
+    /**
+     * Per-DAY quantity returned IN from vans over a window (see {@link DailyMovementAggregate}) — the
+     * inbound series of the dashboard's movement chart. Same COMPLETED-only scope and same line
+     * {@code quantity} measure as {@link #aggregateReturnedByProduct}; grouped by {@code return_date}
+     * instead of by product. One query for the whole window, ascending.
+     */
+    @Query("""
+            select new com.salesmanagement.vanops.api.DailyMovementAggregate(
+                       r.returnDate, coalesce(sum(l.quantity), 0))
+            from ReturnSheet r
+            join r.lines l
+            where r.returnDate >= :from and r.returnDate < :to
+              and r.status in :statuses
+            group by r.returnDate
+            order by r.returnDate asc
+            """)
+    List<DailyMovementAggregate> aggregateReturnedByDate(@Param("from") LocalDate from,
+                                                         @Param("to") LocalDate to,
+                                                         @Param("statuses") Collection<ReturnSheetStatus> statuses);
+
 }

@@ -521,6 +521,84 @@ class UserServiceTest {
         }
 
         @Test
+        @DisplayName("A visible-role scope overrides the caller's role filter")
+        void searchUsers_VisibleRole_OverridesCallerSuppliedRoleFilter() {
+
+            // Arrange — a SALES_MANAGER asking for ADMIN accounts
+            PageRequest pageRequest = new PageRequest();
+            Pageable pageable = pageRequest.toPageable();
+
+            Page<User> page = new PageImpl<>(List.of(), pageable, 0);
+
+            when(userRepository.search("", UserRole.SALES_REP, null, pageable))
+                    .thenReturn(page);
+
+            // Act
+            userService.searchUsers(
+                    null, UserRole.ADMIN, null, pageRequest, UserRole.SALES_REP);
+
+            // Assert — the requested ADMIN filter never reaches the repository
+            verify(userRepository).search("", UserRole.SALES_REP, null, pageable);
+            verify(userRepository, never()).search("", UserRole.ADMIN, null, pageable);
+        }
+
+        @Test
+        @DisplayName("A visible-role scope also scopes the status counts")
+        void searchUsers_VisibleRole_ScopesStatusCounts() {
+
+            // Arrange
+            PageRequest pageRequest = new PageRequest();
+            Pageable pageable = pageRequest.toPageable();
+
+            Page<User> page = new PageImpl<>(List.of(), pageable, 0);
+
+            when(userRepository.search("", UserRole.SALES_REP, null, pageable))
+                    .thenReturn(page);
+            when(userRepository.countByStatusAndRole(UserStatus.ACTIVE, UserRole.SALES_REP))
+                    .thenReturn(4L);
+            when(userRepository.countByStatusAndRole(UserStatus.INACTIVE, UserRole.SALES_REP))
+                    .thenReturn(1L);
+            when(userRepository.countByStatusAndRole(UserStatus.SUSPENDED, UserRole.SALES_REP))
+                    .thenReturn(0L);
+
+            // Act
+            UserListResponse response = userService.searchUsers(
+                    null, null, null, pageRequest, UserRole.SALES_REP);
+
+            // Assert — counts come from the scoped query, never the global one
+            assertThat(response.counts().active()).isEqualTo(4L);
+            assertThat(response.counts().inactive()).isEqualTo(1L);
+            assertThat(response.counts().suspended()).isEqualTo(0L);
+            assertThat(response.counts().total()).isEqualTo(5L);
+            verify(userRepository, never()).countByStatus(any());
+        }
+
+        @Test
+        @DisplayName("A null visible-role leaves the caller's filter and global counts intact")
+        void searchUsers_NullVisibleRole_KeepsCallerFilterAndGlobalCounts() {
+
+            // Arrange — an ADMIN is unrestricted
+            PageRequest pageRequest = new PageRequest();
+            Pageable pageable = pageRequest.toPageable();
+
+            Page<User> page = new PageImpl<>(List.of(), pageable, 0);
+
+            when(userRepository.search("", UserRole.ADMIN, null, pageable)).thenReturn(page);
+            when(userRepository.countByStatus(UserStatus.ACTIVE)).thenReturn(5L);
+            when(userRepository.countByStatus(UserStatus.INACTIVE)).thenReturn(2L);
+            when(userRepository.countByStatus(UserStatus.SUSPENDED)).thenReturn(1L);
+
+            // Act
+            UserListResponse response = userService.searchUsers(
+                    null, UserRole.ADMIN, null, pageRequest, null);
+
+            // Assert
+            verify(userRepository).search("", UserRole.ADMIN, null, pageable);
+            assertThat(response.counts().total()).isEqualTo(8L);
+            verify(userRepository, never()).countByStatusAndRole(any(), any());
+        }
+
+        @Test
         @DisplayName("Blank search term is normalised to no search")
         void searchUsers_BlankSearchTerm_NormalisedToEmptyString() {
 

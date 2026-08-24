@@ -135,6 +135,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     long countByStatus(UserStatus status);
 
+    /**
+     * Counts users with the given status, restricted to a single role.
+     *
+     * <p>Backs the summary cards for callers whose view of the user base is
+     * scoped to one role — a SALES_MANAGER sees SALES_REP accounts only, so
+     * their counts must be scoped the same way the list is. ADMIN callers keep
+     * using the unscoped {@link #countByStatus(UserStatus)}.
+     *
+     * @param status the status to count
+     * @param role   the role to restrict the count to
+     * @return number of users with that status and role
+     */
+    long countByStatusAndRole(UserStatus status, UserRole role);
+
     /** Ids of all users in a given status. (ACTIVE) => announcement audience, FR-108. */
     @Query("select u.id from User u where u.status = :status")
     List<Long> findIdsByStatus(@Param("status") UserStatus status);

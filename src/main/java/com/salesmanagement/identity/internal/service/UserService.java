@@ -313,19 +313,55 @@ public class UserService implements UserDetailsService {
                                         UserRole role,
                                         UserStatus status,
                                         PageRequest pageRequest) {
+        return searchUsers(search, role, status, pageRequest, null);
+    }
+
+    /**
+     * Same as {@link #searchUsers(String, UserRole, UserStatus, PageRequest)}, but
+     * with the caller's view of the user base optionally confined to a single role.
+     *
+     * <p>{@code visibleRole} is an <em>authorization</em> scope, not a user-supplied
+     * filter, and the two are deliberately not merged: when it is non-null it
+     * <b>overrides</b> the {@code role} query parameter outright, so a caller cannot
+     * widen their own view by passing {@code ?role=ADMIN}. The status counts are
+     * scoped to the same role, otherwise the summary cards would leak the size of a
+     * user base the caller is not allowed to enumerate.
+     *
+     * <p>Pass {@code null} for an unrestricted view (ADMIN) — counts then stay global,
+     * as documented on {@link UserStatusCounts}.
+     *
+     * @param search      optional name/phone number search term (blank treated as null)
+     * @param role        optional role filter; ignored when {@code visibleRole} is set
+     * @param status      optional status filter
+     * @param pageRequest pagination and sorting parameters from the controller
+     * @param visibleRole the only role this caller may see, or {@code null} for all
+     * @return combined paginated list and status counts, both within {@code visibleRole}
+     */
+    @Transactional(readOnly = true)
+    public UserListResponse searchUsers(String search,
+                                        UserRole role,
+                                        UserStatus status,
+                                        PageRequest pageRequest,
+                                        UserRole visibleRole) {
 
         String normalisedSearch = (search == null || search.isBlank()) ? "" : search.trim();
+        UserRole effectiveRole  = visibleRole != null ? visibleRole : role;
 
         Page<User> page = userRepository.search(
-                normalisedSearch, role, status, pageRequest.toPageable());
+                normalisedSearch, effectiveRole, status, pageRequest.toPageable());
 
         PageResponse<UserResponse> users =
                 PageResponse.of(page.map(UserResponse::from));
 
-        UserStatusCounts counts = UserStatusCounts.of(
-                userRepository.countByStatus(UserStatus.ACTIVE),
-                userRepository.countByStatus(UserStatus.INACTIVE),
-                userRepository.countByStatus(UserStatus.SUSPENDED));
+        UserStatusCounts counts = visibleRole == null
+                ? UserStatusCounts.of(
+                        userRepository.countByStatus(UserStatus.ACTIVE),
+                        userRepository.countByStatus(UserStatus.INACTIVE),
+                        userRepository.countByStatus(UserStatus.SUSPENDED))
+                : UserStatusCounts.of(
+                        userRepository.countByStatusAndRole(UserStatus.ACTIVE,    visibleRole),
+                        userRepository.countByStatusAndRole(UserStatus.INACTIVE,  visibleRole),
+                        userRepository.countByStatusAndRole(UserStatus.SUSPENDED, visibleRole));
 
         return new UserListResponse(users, counts);
     }

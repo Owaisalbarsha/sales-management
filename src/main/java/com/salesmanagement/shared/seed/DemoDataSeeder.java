@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Runs the demo-data contributors, once, on startup.
@@ -92,7 +93,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         log.info("Demo data seeding completed in {} ms", elapsedMs);
         log.info("Historical period: {}", context.window());
         context.counts().forEach((label, created) ->
-                log.info(String.format("  %-26s %d", label, created)));
+                log.info(String.format(Locale.ROOT, "  %-26s %d", label, created)));
         log.info("──────────────────────────────────────────────────────────────");
     }
 }

@@ -90,30 +90,86 @@ class DemoDataSeederSafetyTest {
         }
 
         @Test
-        @DisplayName("the window ends today and exposes the half-open analytics bound")
+        @DisplayName("the window is a rolling two months ending today, with the half-open bound")
         void windowEndsToday() {
             SeedWindow window = SeedWindow.untilToday();
+            LocalDate today = LocalDate.now(SeedWindow.BUSINESS_ZONE);
 
-            assertThat(window.start()).isEqualTo(LocalDate.of(2026, 1, 1));
-            assertThat(window.today()).isEqualTo(LocalDate.now(SeedWindow.BUSINESS_ZONE));
-            assertThat(window.exclusiveEnd()).isEqualTo(window.today().plusDays(1));
+            assertThat(window.today()).isEqualTo(today);
+            assertThat(window.start()).isEqualTo(today.minusDays(SeedWindow.HISTORY_DAYS - 1L));
+            assertThat(window.allDays()).hasSize(SeedWindow.HISTORY_DAYS);
+            assertThat(window.exclusiveEnd()).isEqualTo(today.plusDays(1));
         }
 
+        /**
+         * The window is relative, not anchored. This is what keeps the demo dataset the same shape
+         * forever instead of growing a day longer on every restart - the failure mode a hardcoded
+         * start date has, and the reason the previous eight-month window had to go.
+         */
         @Test
-        @DisplayName("every month from January to the current one is covered, the last one partial")
-        void coversEveryMonth() {
+        @DisplayName("the window is the same length no matter what day it is resolved on")
+        void windowLengthIsStable() {
+            SeedWindow spring = SeedWindow.of(
+                    LocalDate.of(2026, 3, 2).minusDays(SeedWindow.HISTORY_DAYS - 1L),
+                    LocalDate.of(2026, 3, 2));
+            SeedWindow autumn = SeedWindow.of(
+                    LocalDate.of(2026, 10, 19).minusDays(SeedWindow.HISTORY_DAYS - 1L),
+                    LocalDate.of(2026, 10, 19));
+
+            assertThat(spring.allDays()).hasSameSizeAs(autumn.allDays());
+            assertThat(SeedWindow.untilToday().allDays()).hasSize(SeedWindow.HISTORY_DAYS);
+        }
+
+        /**
+         * Sixty days always straddles at least one month boundary, so the month-over-month
+         * comparison on the dashboard has two columns to compare rather than one.
+         */
+        @Test
+        @DisplayName("the window spans two or three calendar months, the outer ones partial")
+        void coversMoreThanOneMonth() {
             SeedWindow window = SeedWindow.of(
-                    LocalDate.of(2026, 1, 1), LocalDate.of(2026, 8, 23));
+                    LocalDate.of(2026, 6, 25), LocalDate.of(2026, 8, 23));
 
             List<YearMonth> months = window.months();
 
-            assertThat(months).hasSize(8);
-            assertThat(months.get(0)).isEqualTo(YearMonth.of(2026, 1));
-            assertThat(months.get(7)).isEqualTo(YearMonth.of(2026, 8));
+            assertThat(months).hasSize(3);
+            assertThat(months.get(0)).isEqualTo(YearMonth.of(2026, 6));
+            assertThat(months.get(2)).isEqualTo(YearMonth.of(2026, 8));
 
+            // The first month starts at the window, not at the 1st.
+            assertThat(window.workDaysOf(YearMonth.of(2026, 6)))
+                    .allSatisfy(d -> assertThat(d).isAfterOrEqualTo(LocalDate.of(2026, 6, 25)));
             // The current month stops at today, not at the end of the calendar month.
             assertThat(window.workDaysOf(YearMonth.of(2026, 8)))
                     .allSatisfy(d -> assertThat(d).isBeforeOrEqualTo(LocalDate.of(2026, 8, 23)));
+        }
+
+        /**
+         * The distinction the whole route/visit design rests on. {@code VisitSweepJob} finalises
+         * every past-dated route that is still open, so contributors writing finished documents must
+         * be able to ask for "the days that are over" without accidentally including today.
+         */
+        @Test
+        @DisplayName("past working days exclude today, so no finished document can be dated now")
+        void pastWorkDaysExcludeToday() {
+            SeedWindow window = SeedWindow.of(
+                    LocalDate.of(2026, 6, 25), LocalDate.of(2026, 8, 20));  // a Thursday
+
+            assertThat(window.workDays()).contains(window.today());
+            assertThat(window.pastWorkDays())
+                    .isNotEmpty()
+                    .doesNotContain(window.today())
+                    .allSatisfy(d -> assertThat(d).isBefore(window.today()));
+        }
+
+        @Test
+        @DisplayName("the weekly index gives the seasonal curves enough points to have a shape")
+        void weekIndexWalksTheWindow() {
+            SeedWindow window = SeedWindow.untilToday();
+
+            assertThat(window.weekIndex(window.start())).isZero();
+            assertThat(window.weekIndex(window.today())).isEqualTo(window.weekCount() - 1);
+            assertThat(window.weekCount()).isGreaterThanOrEqualTo(8);
         }
 
         @Test

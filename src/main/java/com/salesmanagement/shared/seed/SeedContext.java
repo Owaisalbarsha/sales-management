@@ -1,11 +1,13 @@
 package com.salesmanagement.shared.seed;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 
 /**
@@ -13,14 +15,21 @@ import java.util.Random;
  * source, the ids each module produced, and the running row counts for the final summary.
  *
  * <p><strong>Why ids travel as plain values.</strong> The customer seeder needs territory ids, the
- * invoice seeder needs customer, product and rep ids. Passing entities would mean every module
- * importing every other module's internals — the exact coupling the architecture forbids. So
+ * invoice seeder needs customer, product, visit and rep ids. Passing entities would mean every
+ * module importing every other module's internals - the exact coupling the architecture forbids. So
  * contributors publish flat records here (id plus the few attributes a downstream contributor needs
  * to make a realistic choice), which is the same shape the modules' public facades already use to
  * talk to each other.</p>
  *
+ * <p><strong>The registries are how business rules survive a module boundary.</strong> An invoice
+ * may only cite a visit whose customer and rep match its own (D13), and the invoicing module cannot
+ * read the visit table to check. So the visit seeder publishes {@link SeedVisit} rows and the
+ * invoice seeder builds from those, which makes the mismatch unrepresentable rather than merely
+ * unlikely. The same holds for van stock: {@link SeedVanMovement} carries what was loaded and what
+ * was sold, so the closing van position is arithmetic rather than a guess.</p>
+ *
  * <p><strong>Randomness is seeded and per-purpose.</strong> {@link #random(String)} derives a stream
- * from a fixed seed and the purpose name, so every run produces byte-identical data and — crucially —
+ * from a fixed seed and the purpose name, so every run produces byte-identical data and - crucially -
  * adding a contributor does not shift the numbers every other contributor draws. A shared global
  * {@code Random} would make the whole dataset change whenever anyone inserted one extra call.</p>
  */
@@ -40,6 +49,9 @@ public final class SeedContext {
     private final List<SeedCustomer> customers = new ArrayList<>();
     private final List<SeedProduct> products = new ArrayList<>();
     private final List<SeedRoute> routes = new ArrayList<>();
+    private final List<SeedVisit> visits = new ArrayList<>();
+    private final List<SeedVanMovement> vanLoadsToday = new ArrayList<>();
+    private final List<SeedVanMovement> vanSalesToday = new ArrayList<>();
     private final Map<String, Long> staff = new LinkedHashMap<>();
     private final Map<String, Integer> counts = new LinkedHashMap<>();
 
@@ -54,8 +66,8 @@ public final class SeedContext {
 
     /**
      * Whether this run should first delete the operational rows it owns inside the window.
-     * Guarded twice upstream (dev/local profile AND an explicit property) and never touches master
-     * data — see {@link DemoDataContributor#resetSeededData(SeedContext)}.
+     * Guarded by an explicit property and never touches master data - see
+     * {@link DemoDataContributor#resetSeededData(SeedContext)}.
      */
     public boolean isReset() {
         return reset;
@@ -66,7 +78,39 @@ public final class SeedContext {
         return new Random(RANDOM_SEED * 31 + purpose.hashCode());
     }
 
-    // ── registries ────────────────────────────────────────────────────────────
+    /**
+     * A reproducible stream for one <em>specific thing</em> - one route, one invoice, one day's
+     * load - identified by the discriminators.
+     *
+     * <p><strong>This is what makes a contributor genuinely idempotent, and the plain
+     * {@link #random(String)} is not enough on its own.</strong> A single sequential stream per
+     * contributor is only reproducible when the contributor makes exactly the same sequence of
+     * draws every run. It does not: a re-run finds rows already in the database and skips them
+     * <em>before</em> drawing, so every skip shifts the whole remaining sequence by however many
+     * numbers the skipped item would have consumed. The route contributor demonstrated this
+     * plainly - a second run over an already-seeded database created thirty-five routes that the
+     * first run had decided against, because the "is this rep out today" coin came up differently
+     * once the stream had shifted underneath it. Left alone it converges on seeding everything,
+     * which is the opposite of idempotent.</p>
+     *
+     * <p>Deriving the stream from the thing's own identity removes the coupling entirely. The
+     * decision made about a given route on a given date is the same decision on every run, in any
+     * order, whatever else is or is not already present.</p>
+     *
+     * @param purpose        the contributor's own namespace, e.g. {@code "routes"}
+     * @param discriminators what identifies this one item, e.g. rep id and date
+     */
+    public Random randomFor(String purpose, Object... discriminators) {
+        long seed = RANDOM_SEED * 31 + purpose.hashCode();
+        for (Object discriminator : discriminators) {
+            // A large odd multiplier so two different discriminator lists cannot collide simply by
+            // being permutations of one another.
+            seed = seed * 1_000_003L + Objects.hashCode(discriminator);
+        }
+        return new Random(seed);
+    }
+
+    // -- registries -----------------------------------------------------------
 
     public List<SeedRep> representatives() {
         return representatives;
@@ -88,6 +132,28 @@ public final class SeedContext {
         return routes;
     }
 
+    /**
+     * Every visit this run created, published for the invoice seeder.
+     *
+     * <p>An invoice that names a visit must agree with it on customer and representative, and the
+     * invoicing module has no way to verify that for itself - {@code VisitFacade} would reject the
+     * mismatch at runtime, but a seeder writing through the repository bypasses the facade. Reading
+     * the invoice's customer and rep straight off the visit removes the possibility.</p>
+     */
+    public List<SeedVisit> visits() {
+        return visits;
+    }
+
+    /** Units moved warehouse to van today, per rep and product. Written by the vanops seeder. */
+    public List<SeedVanMovement> vanLoadsToday() {
+        return vanLoadsToday;
+    }
+
+    /** Units sold off the van today, per rep and product. Written by the invoice seeder. */
+    public List<SeedVanMovement> vanSalesToday() {
+        return vanSalesToday;
+    }
+
     /** Non-rep staff ids by logical role key, e.g. {@code "SALES_MANAGER"}, {@code "ADMIN"}. */
     public Map<String, Long> staff() {
         return staff;
@@ -103,7 +169,12 @@ public final class SeedContext {
         return products.stream().filter(p -> p.movementClass() == movementClass).toList();
     }
 
-    // ── summary counters ──────────────────────────────────────────────────────
+    /** Completed visits, the only ones an invoice may be raised against. */
+    public List<SeedVisit> completedVisits() {
+        return visits.stream().filter(SeedVisit::isCompleted).toList();
+    }
+
+    // -- summary counters -----------------------------------------------------
 
     /** Records how many rows of one kind were created, for the closing log line. */
     public void count(String label, int created) {
@@ -114,7 +185,7 @@ public final class SeedContext {
         return counts;
     }
 
-    // ── flat carriers ─────────────────────────────────────────────────────────
+    // -- flat carriers --------------------------------------------------------
 
     /**
      * A sales representative.
@@ -137,7 +208,7 @@ public final class SeedContext {
      *
      * @param tier    purchase profile: 1 = small shop (few, small invoices), 2 = mid retailer,
      *                3 = supermarket (frequent, large invoices)
-     * @param dormant if true the customer stops buying part-way through the year, so the
+     * @param dormant if true the customer stops buying part-way through the window, so the
      *                dormant-customer report has genuine subjects instead of an empty table
      */
     public record SeedCustomer(Long id, Long territoryId, String name, int tier, boolean dormant) {}
@@ -148,15 +219,45 @@ public final class SeedContext {
 
     /** A seeded route and the customers assigned to it, published for the visit seeder. */
     public record SeedRoute(Long id, Long representativeId, Long territoryId, LocalDate date,
-                            List<Long> customerIds, String status) {}
+                            List<Long> customerIds, String status) {
+
+        /** A finished route: every stop must carry a terminal visit. */
+        public boolean isCompleted() {
+            return "COMPLETED".equals(status);
+        }
+    }
 
     /**
-     * How often a product sells across the seeded year. Not a label the reports read — it only
+     * A seeded visit, published so the invoice seeder can bind a sale to the stop that produced it.
+     *
+     * @param status one of {@code COMPLETED}, {@code IN_PROGRESS}, {@code MISSED}
+     */
+    public record SeedVisit(Long id, Long routeId, Long customerId, Long representativeId,
+                            LocalDate date, String status, Instant checkInTime, Instant checkOutTime) {
+
+        /** Only a completed visit is a sale opportunity that has finished happening. */
+        public boolean isCompleted() {
+            return "COMPLETED".equals(status);
+        }
+    }
+
+    /**
+     * Units of one product moving on or off one rep's van today.
+     *
+     * <p>Loads and sales are recorded separately rather than as a running balance so the closing
+     * position can be computed once, at the end, by the contributor that owns the stock tables -
+     * and so a sale can never drive the balance negative mid-stream, which the
+     * {@code chk_van_inventory_qty} constraint would reject.</p>
+     */
+    public record SeedVanMovement(Long representativeId, Long productId, int quantity) {}
+
+    /**
+     * How often a product sells across the seeded window. Not a label the reports read - it only
      * steers how many invoice lines a product lands on, and the fast/slow and aging reports then
      * derive their own verdicts from that history.
      */
     public enum MovementClass {
-        /** On a large share of invoices, all year. Drives {@code fastMovingProducts}. */
+        /** On a large share of invoices, throughout the window. Drives {@code fastMovingProducts}. */
         FAST,
         /** Sells regularly but unremarkably. */
         MODERATE,
@@ -164,7 +265,7 @@ public final class SeedContext {
         SLOW,
         /**
          * Stocked but not sold or loaded for longer than the aging threshold, so the aging report
-         * finds it on its own. Deliberately still has on-hand — dead stock with zero quantity is
+         * finds it on its own. Deliberately still has on-hand - dead stock with zero quantity is
          * not the operational problem the report exists to surface.
          */
         AGING

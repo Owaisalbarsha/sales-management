@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
@@ -105,7 +106,6 @@ public class CustomerDemoData implements DemoDataContributor {
     @Override
     @Transactional
     public void contribute(SeedContext context) {
-        Random random = context.random("customers");
         Map<String, Long> existingByName = new LinkedHashMap<>();
         customerRepository.findAll().forEach(c -> existingByName.putIfAbsent(c.getName(), c.getId()));
 
@@ -138,7 +138,10 @@ public class CustomerDemoData implements DemoDataContributor {
                 if (id == null) {
                     double[] centre = DISTRICT_CENTRES.getOrDefault(
                             territory.name(), new double[]{33.5138, 36.2765});
-                    id = create(territory, name, tier, centre, random);
+                    // One stream per customer name, so a partially seeded database does not
+                    // shift the coordinates and addresses of everyone created after it.
+                    id = create(territory, name, tier, centre,
+                            context.randomFor("customers", name));
                     created++;
                 }
 
@@ -166,7 +169,7 @@ public class CustomerDemoData implements DemoDataContributor {
 
         String street = STREETS.get(random.nextInt(STREETS.size()));
         String address = territory.name() + " - " + street + " - بناء رقم " + (random.nextInt(80) + 1);
-        String phone = "+9639" + (30 + random.nextInt(69)) + String.format("%06d", random.nextInt(1_000_000));
+        String phone = "+9639" + (30 + random.nextInt(69)) + String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
 
         return customerService.create(new CreateCustomerRequest(
                 territory.id(), name, address, phone, latitude, longitude, category)).id();

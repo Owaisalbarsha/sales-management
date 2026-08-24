@@ -66,7 +66,14 @@ public interface DemoDataContributor {
         public static final int VAN_OPERATIONS = 70;
         public static final int INVOICES = 80;
         public static final int TRACKING = 85;
-        /** Last: the warehouse snapshot is the end state of everything above. */
+        /** The warehouse and van snapshot is the end state of every movement above. */
         public static final int WAREHOUSE_STOCK = 95;
+        /**
+         * Last of all. A stock count records what a manager physically found on the shelf
+         * <em>against</em> the recorded figure, so it can only be written once that recorded figure
+         * exists - otherwise every variance would be measured against an empty warehouse and the
+         * variance report would show the entire catalogue as missing.
+         */
+        public static final int STOCK_COUNTS = 98;
     }
 }

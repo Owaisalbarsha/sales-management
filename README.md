@@ -185,8 +185,6 @@ Four layers:
 - **Module tests** — `@ApplicationModuleTest` boots one module with its cross-module facades mocked, which is several times faster than a full context and forces honest decoupling.
 - **Repository slices** — `@DataJpaTest` for query correctness.
 
-89 service-level test cases currently.
-
 ---
 
 ## Database
@@ -206,8 +204,6 @@ V7  routing              V15 visit client_uuid
 
 Conventions: money is `NUMERIC(12,2)` and always recomputed server-side; all timestamps are `Instant` in UTC, with clients sending ISO 8601 and explicit offsets; business dates are `LocalDate` set by the server.
 
-The ERD is in [`docs/ERD.md`](docs/ERD.md).
-
 ---
 
 ## Project status
@@ -215,13 +211,12 @@ The ERD is in [`docs/ERD.md`](docs/ERD.md).
 Built over roughly three months. Honest state of things:
 
 **Done and working**
-All thirteen modules, the full REST surface, JWT security, reporting with Excel and Arabic PDF export, push notifications, live GPS tracking, and the offline sync push path.
+All thirteen modules, the full REST surface, JWT security, reporting with Excel and Arabic PDF export, push notifications, live GPS tracking, and offline sync.
 
 **Known limitations, deliberately accepted at this scope**
 - Route optimisation uses straight-line (Haversine) distance rather than real road routing, and anchors to the first stop rather than the rep's live position.
-- The sync module's push path is implemented but is not yet covered by automated tests.
 - VAT is not configurable at runtime; it would touch the invoice integrity hash and the frozen-total contract.
 - A rare race on concurrent demand orders is guarded at load time rather than eliminated.
 
 **What I would do next**
-Test coverage on sync, real road-network routing, and moving reports to materialised views if data volume ever justified it.
+Real road-network routing, and moving reports to materialised views if data volume ever justified it.
